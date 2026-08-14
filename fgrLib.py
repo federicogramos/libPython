@@ -389,8 +389,6 @@ def compilar_pdf_automatico(archivo_principal="tp.tex"):
 			print("Advertencias de compilación = 0")
 
 		if resultado.returncode == 0:
-			print("✅ PDF generado y actualizado ok.")
-
 
 			# ESTRATEGIA DE LIMPIEZA: Solo si la compilación fue exitosa
 			ruta_ipynb_out = os.path.abspath(os.path.join(os.getcwd(), "ipynb.out"))
@@ -403,6 +401,8 @@ def compilar_pdf_automatico(archivo_principal="tp.tex"):
 			if os.path.exists(ruta_latex_tmp):
 				shutil.rmtree(ruta_latex_tmp)
 				print("➔ Archivos /latex/tmp/ eliminados tras compilar LaTeX ok.", flush=True)
+
+			print("✅ PDF generado y actualizado ok.")
 
 		else:
 			print("❌ Error de compilación en LaTeX. Revisa el archivo log o la sintaxis.")
@@ -431,13 +431,13 @@ def procesar_y_compilar_informe(nombre_notebook, texFile):
 	ruta_ipynb_out = os.path.abspath(os.path.join(base_dir, "ipynb.out"))
 	if os.path.exists(ruta_ipynb_out):
 		shutil.rmtree(ruta_ipynb_out)
-		print("🧹 Limpieza inicial: ipynb.out eliminada.", flush=True)
+		print("♻ Limpieza inicial: ipynb.out eliminada.", flush=True)
 
 	# 2. Borrar la carpeta latex/tmp vieja si existe
 	ruta_latex_tmp = os.path.abspath(os.path.join(base_dir, "latex", "tmp"))
 	if os.path.exists(ruta_latex_tmp):
 		shutil.rmtree(ruta_latex_tmp)
-		print("🧹 Limpieza inicial: Archivos auxiliares de LaTeX (tmp) eliminados.", flush=True)
+		print("♻ Limpieza inicial: Archivos auxiliares de LaTeX (tmp) eliminados.", flush=True)
 
 	# 2. Convertir la ruta del .tex a RUTA ABSOLUTA para evitar bloqueos de Windows 
 	ruta_tex_absoluta = os.path.abspath(os.path.join(base_dir, "latex", texFile)) 
