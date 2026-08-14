@@ -9,6 +9,4 @@
 FLAGS="-B -u -c"
 
 ## Ejecución del rearmado.
-#"/c/Users/feder/.local/bin/python3.14.exe" $FLAGS "import sys; sys.path.append('C:/fgr/16gb/lib/libPython'); import fgrLib; fgrLib.procesar_y_compilar_informe('tp2.ipynb', 'tp2.tex')"
-## Ejecución del rearmado utilizando winpty para forzar el canal interactivo real
 "/c/Users/feder/.local/bin/python3.14.exe" $FLAGS "import sys; sys.path.append('C:/fgr/16gb/lib/libPython'); import fgrLib; fgrLib.procesar_y_compilar_informe('tp2.ipynb', 'tp2.tex')"
