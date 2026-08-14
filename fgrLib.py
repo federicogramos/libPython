@@ -38,7 +38,7 @@ def get_this_ipynb_filename():
 	if len(notebooks) == 1:
 		return notebooks[0]
 	elif len(notebooks) > 1:
-		print("⚠️ Múltiples .ipynb detectados. Usando el archivo modificado más recientemente.")
+		print("⚠ Múltiples .ipynb detectados. Usando el archivo modificado más recientemente.")
 		# Agregamos la ruta completa para que os.path.getmtime no falle
 		return max(notebooks, key=lambda x: os.path.getmtime(os.path.join(directorio_actual, x)))
 	else:
@@ -293,7 +293,7 @@ def procesar_notebook_completo(verbose=False):
 				
 				archivos_generados_count += 1  # Incrementar contador
 				if verbose:
-					print(f"✅ Generado: {archivo_actual}")
+					print(f"☑ Generado: {archivo_actual}")
 					
 				bloque_actual = []
 			
@@ -318,11 +318,11 @@ def procesar_notebook_completo(verbose=False):
 		
 		archivos_generados_count += 1  # Incrementar contador del último bloque
 		if verbose:
-			print(f"✅ Generado: {archivo_actual}")
+			print(f"☑ Generado: {archivo_actual}")
 
 	# 📊 REPORTE RESUMIDO: Si el flag verbose está apagado, reporta el total en una sola línea
 	if not verbose:
-		print(f"✅ Extracción completa. N = {archivos_generados_count} archivos LaTeX (.tex) en 'ipynb.out/'.")
+		print(f"☑ Extracción completa. N = {archivos_generados_count} archivos LaTeX (.tex) en 'ipynb.out/'.")
 
 
 #===============================================================================
@@ -332,7 +332,7 @@ def compilar_pdf_automatico(archivo_principal="tp.tex"):
 
 	"""Compila el archivo .tex principal a PDF de forma segura y sin colgarse."""
 	if not os.path.exists(archivo_principal):
-		print(f"⚠️ No se encontró el archivo '{archivo_principal}' para compilar.")
+		print(f"⚠ No se encontró el archivo '{archivo_principal}' para compilar.")
 		return
 
 	# Verificar si latexmk está instalado en el PATH del sistema
@@ -345,11 +345,11 @@ def compilar_pdf_automatico(archivo_principal="tp.tex"):
 	nombre_base = os.path.basename(archivo_principal)
 	cwd_destino = dir_trabajo if dir_trabajo else None
 
-	print(f"⚙️\u3000Compilando '{archivo_principal}' con latexmk...")
+	print(f"⛭ Compilando '{archivo_principal}' con latexmk...")
 	try:
 		# Ejecuta el comando de compilación con latexmk de forma controlada
 		resultado = subprocess.run(
-			["latexmk", "-g", "-synctex=1", "-interaction=nonstopmode", "-file-line-error", "-pdf", "-auxdir=tmp", nombre_base],
+			["latexmk", "-g", "-synctex=0", "-interaction=nonstopmode", "-file-line-error", "-pdf", "-auxdir=tmp", nombre_base],
 			stdout=subprocess.PIPE,
 			stderr=subprocess.PIPE,
 			text=True,
@@ -382,14 +382,28 @@ def compilar_pdf_automatico(archivo_principal="tp.tex"):
 		
 		# Desplegar resultado sintético detallado con archivos
 		if advertencias:
-			print(f"⚠️ Se encontraron {len(advertencias)} advertencias en la compilación:")
+			print(f"⚠ Se encontraron {len(advertencias)} advertencias en la compilación:")
 			for adv in advertencias:
 				print(f"  • {adv}")
 		else:
 			print("Advertencias de compilación = 0")
 
 		if resultado.returncode == 0:
-			print("📊 PDF generado y actualizado ok.")
+			print("✅ PDF generado y actualizado ok.")
+
+
+			# ESTRATEGIA DE LIMPIEZA: Solo si la compilación fue exitosa
+			ruta_ipynb_out = os.path.abspath(os.path.join(os.getcwd(), "ipynb.out"))
+			if os.path.exists(ruta_ipynb_out):
+				shutil.rmtree(ruta_ipynb_out)
+				print("➔ Carpeta ipynb.out eliminada tras compilar LaTeX  ok.", flush=True)
+
+			# 2. Eliminar carpeta latex/tmp (NUEVO)
+			ruta_latex_tmp = os.path.abspath(os.path.join(os.getcwd(), "latex", "tmp"))
+			if os.path.exists(ruta_latex_tmp):
+				shutil.rmtree(ruta_latex_tmp)
+				print("➔ Archivos /latex/tmp/ eliminados tras compilar LaTeX ok.", flush=True)
+
 		else:
 			print("❌ Error de compilación en LaTeX. Revisa el archivo log o la sintaxis.")
 			# Muestra las últimas 5 líneas del error para saber qué falló
@@ -410,13 +424,20 @@ def procesar_y_compilar_informe(nombre_notebook, texFile):
 	# SILENCIAR ADVERTENCIA DE ZMQ: Oculta el cartel molesto del bucle de eventos asíncronos en Windows 
 	warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*Proactor event loop.*") 
 	
-	# 1. Fijar la raíz del proyecto de forma segura 
-	#base_dir = os.path.dirname(os.path.abspath(__file__)) if __file__ else "." 
-	#os.chdir(base_dir) 
-
 	# Usamos os.getcwd() que obtiene la carpeta actual de la terminal
 	base_dir = os.getcwd() # Ya no hace falta os.chdir(base_dir) porque ya estás parado en esa carpeta
 
+	# LIMPIEZA PREVENTIVA AL INICIO: Borra fantasmas de corridas anteriores.
+	ruta_ipynb_out = os.path.abspath(os.path.join(base_dir, "ipynb.out"))
+	if os.path.exists(ruta_ipynb_out):
+		shutil.rmtree(ruta_ipynb_out)
+		print("🧹 Limpieza inicial: ipynb.out eliminada.", flush=True)
+
+	# 2. Borrar la carpeta latex/tmp vieja si existe
+	ruta_latex_tmp = os.path.abspath(os.path.join(base_dir, "latex", "tmp"))
+	if os.path.exists(ruta_latex_tmp):
+		shutil.rmtree(ruta_latex_tmp)
+		print("🧹 Limpieza inicial: Archivos auxiliares de LaTeX (tmp) eliminados.", flush=True)
 
 	# 2. Convertir la ruta del .tex a RUTA ABSOLUTA para evitar bloqueos de Windows 
 	ruta_tex_absoluta = os.path.abspath(os.path.join(base_dir, "latex", texFile)) 
@@ -434,7 +455,7 @@ def procesar_y_compilar_informe(nombre_notebook, texFile):
 		# 💾 NUEVA LÍNEA: Guarda los outputs generados de vuelta en el archivo físico 
 		with open(nombre_notebook, "w", encoding="utf-8") as f: 
 			nbformat.write(nb, f) 
-		print("✅ Ejecución celdas ok. Output saved.", flush=True) 
+		print("☑ Ejecución celdas ok. Output saved.", flush=True) 
 	except CellExecutionError as e: 
 		print("\n❌ EL NOTEBOOK SE DETUVO PORQUE UNA CELDA TARDÓ DEMASIADO O FALLÓ:", flush=True) 
 		print(e, flush=True) 
@@ -453,6 +474,8 @@ def procesar_y_compilar_informe(nombre_notebook, texFile):
 	
 	# Invocamos tu función original pasándole la ruta absoluta blindada 
 	compilar_pdf_automatico(ruta_tex_absoluta) 
+
+
 	
 	# 4. Salida limpia saltándose los cuelgues de hilos ocultos de Python 3.14 en Windows 
 	os._exit(0)
