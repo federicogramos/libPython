@@ -443,7 +443,7 @@ def procesar_y_compilar_informe(nombre_notebook, texFile):
 	ruta_tex_absoluta = os.path.abspath(os.path.join(base_dir, "latex", texFile)) 
 	
 	# El flush=True obliga a Git Bash a mostrar el texto en pantalla de inmediato 
-	print(f"Ejecutando Notebook: {nombre_notebook}...", flush=True) 
+	print(f"⛭ Ejecutando Notebook: {nombre_notebook}...", flush=True) 
 	try: 
 		with open(nombre_notebook, "r", encoding="utf-8") as f: 
 			nb = nbformat.read(f, as_version=4) 
