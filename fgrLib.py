@@ -466,7 +466,7 @@ def procesar_y_compilar_informe(nombre_notebook, texFile):
 		
 	print("Generando ipynb.out desde bloques especificados ipynb...", flush=True) 
 	procesar_notebook_completo() 
-	print("Compilando LaTeX...", flush=True) 
+	print("⛭ Compilando LaTeX...", flush=True) 
 	
 	# 3. Desactivamos los destructores automáticos de la memoria de Jupyter que traban el script 
 	import gc 
