@@ -49,37 +49,29 @@ def get_this_ipynb_filename():
 # Aísla formulas matemáticas y traduce HTML+Markdown imitando bloque.
 #===============================================================================
 
-
 def traducir_a_latex(md_texto):
 
-	# Espaciado posterior para títulos CENTRADOS
 	ESP_CENTER_H1 = "1.0ex"
 	ESP_CENTER_H2 = "0ex"
 	ESP_CENTER_H3 = "0ex"
 	ESP_CENTER_H4 = "-0.5ex"
 
-	# Espaciado posterior para títulos ALINEADOS A LA IZQUIERDA
 	ESP_LEFT_H1   = "1.0ex"
 	ESP_LEFT_H2   = "0ex"
 	ESP_LEFT_H3   = "0ex"
 	ESP_LEFT_H4   = "-0.5ex"
 
-	# Espaciado para etiquetas <center> genéricas sueltas
 	ESP_CENTER_GENERIC = "0ex"
 
-	# PARA EL RENGLÓN VACÍO (<br/> AISLADO)
 	ESP_BREAK = "-0.5ex"
 
-	#---------------------------------------------------------------------------
-	# PROCESAMIENTO BASE Y PROTECCIÓN DE ENTORNOS
-
+	
 	math_blocks = {}
 	def placeholder(match):
 		key = f"MATHBLOCKX{len(math_blocks)}X"
 		math_blocks[key] = match.group(0)
 		return key
 	
-	# <code></code>
 	def code_placeholder(match):
 		key = f"MATHBLOCKX{len(math_blocks)}X"
 		codigo_interno = match.group(1).strip('\n\r')
@@ -92,11 +84,15 @@ def traducir_a_latex(md_texto):
 	md_texto = re.sub(r'\$\$.*?\$\$', placeholder, md_texto, flags=re.DOTALL)
 	md_texto = re.sub(r'\$.*?\$', placeholder, md_texto)
 
-	#---------------------------------------------------------------------------
-	# Etiquetas con posibles anidamientos. N loops anidados para N etiquetas.
-	#---------------------------------------------------------------------------
-	# Ejecutamos pasadas fijas sin bucles abiertos. Esto disuelve capas 
-	# de anidamiento de adentro hacia afuera de manera 100% controlada.
+	# =========================================================================
+	# 🚨 SOLUCIÓN ATÓMICA: ELIMINACIÓN DE CONTENIDO INVISIBLE EN PRIMERA PASADA
+	# =========================================================================
+	# Machea líneas completas que contengan <invisible>...</invisible>, eliminando
+	# opcionalmente los numerales '#' de título, espacios colgados y el salto de línea
+	# para que el tag no deje renglones vacíos ni basura estructural en la memoria.
+	md_texto = re.sub(r'(?m)^#*\s*<invisible>.*?</invisible>\s*\n?', '', md_texto, flags=re.DOTALL)
+	# =========================================================================
+
 	for _ in range(3):
 		# 1. blocknote para citas en gris
 		md_texto = re.sub(r'<blocknote>(.*?)</blocknote>', r'\\begin{quote}\n\\color{gray}\n\1\n\\end{quote}', md_texto, flags=re.DOTALL)
@@ -109,28 +105,23 @@ def traducir_a_latex(md_texto):
 			tipo = match.group(1).strip().lower()
 			contenido = match.group(2)
 			fuentes = {
-				'tt': 'texttt', # Monospace teletype.
-				'sf': 'textsf', # Sans-serif (sin remates).
-				'rm': 'textrm',  # Roman (con remates).
-				'sc': 'textsc'  # Small Caps.
+				'tt': 'texttt', 
+				'sf': 'textsf', 
+				'rm': 'textrm',  
+				'sc': 'textsc'  
 			}
 			comando = fuentes.get(tipo, 'texttt')
 			return f"\\{comando}{{{contenido}}}"
 		md_texto = re.sub(r'<font\s+name=["\'](.*?)["\']>(.*?)</font>', font_sub, md_texto, flags=re.DOTALL)
 
 
-	# Traduce <a href="...">Texto</a> a LaTeX y lo protege usando tu función placeholder
 	def anchor_sub(match):
 		url_real = match.group(1).strip()
 		texto_visible = match.group(2)
-		# Escapa el guion bajo únicamente en el texto visual, manteniendo la URL intacta
 		texto_visible = texto_visible.replace('_', '\\_')
 		
-		# Construye la estructura nativa de LaTeX
 		latex_href = f"\\href{{{url_real}}}{{{texto_visible}}}"
 		
-		# Lo pasamos por tu función placeholder original para aislarlo en math_blocks
-		# Simula un comportamiento idéntico a lo que hacés con las tablas o imágenes
 		class FakeMatch:
 			def __init__(self, val): self.val = val
 			def group(self, num): return self.val
@@ -139,28 +130,20 @@ def traducir_a_latex(md_texto):
 	md_texto = re.sub(r'<a\s+href=["\'](.*?)["\']\s*>(.*?)</a>', anchor_sub, md_texto, flags=re.DOTALL)
 
 
-	# Estructuras que nunca se anidan dentro de si mismas
-	#---------------------------------------------------------------------------
-
-
-	# 1. Títulos CENTRADOS (Mismo mecanismo de espaciado uniforme)
 	md_texto = re.sub(r'^####\s+<center>\s*(.*?)\s*</center>$', fr'{{\\centering \\normalsize \1\\par}}\\vspace*{{{ESP_CENTER_H4}}}', md_texto, flags=re.M)
 	md_texto = re.sub(r'^###\s+<center>\s*(.*?)\s*</center>$', fr'{{\\centering \\large \1\\par}}\\vspace*{{{ESP_CENTER_H3}}}', md_texto, flags=re.M)
 	md_texto = re.sub(r'^##\s+<center>\s*(.*?)\s*</center>$', fr'{{\\centering \\Large \1\\par}}\\vspace*{{{ESP_CENTER_H2}}}', md_texto, flags=re.M)
 	md_texto = re.sub(r'^#\s+<center>\s*(.*?)\s*</center>$', fr'{{\\centering \\LARGE \1\\par}}\\vspace*{{{ESP_CENTER_H1}}}', md_texto, flags=re.M)
 
-	# 2. Títulos ALINEADOS A LA IZQUIERDA (Mecanismo estructural idéntico)
 	md_texto = re.sub(r'^####\s+(.+)$', fr'\\noindent{{\\normalsize \1\\par}}\\vspace*{{{ESP_LEFT_H4}}}', md_texto, flags=re.M)
 	md_texto = re.sub(r'^###\s+(.+)$', fr'\\noindent{{\\large \1\\par}}\\vspace*{{{ESP_LEFT_H3}}}', md_texto, flags=re.M)
 	md_texto = re.sub(r'^##\s+(.+)$', fr'\\noindent{{\\Large \1\\par}}\\vspace*{{{ESP_LEFT_H2}}}', md_texto, flags=re.M)
 	md_texto = re.sub(r'^#\s+(.+)$', fr'\\noindent{{\\LARGE \1\\par}}\\vspace*{{{ESP_LEFT_H1}}}', md_texto, flags=re.M)
 
-	# 3. Limpieza de etiquetas Inline (Aplica la negrita adentro del bloque)
 	md_texto = re.sub(r'<center>(.*?)</center>', fr'{{\\centering \1\\par}}\\vspace*{{{ESP_CENTER_GENERIC}}}', md_texto, flags=re.DOTALL)
 	md_texto = re.sub(r'<b>(.*?)</b>', r'\\textbf{\1}', md_texto, flags=re.DOTALL)
 
-	# CONTENIDO INVISIBLE
-	md_texto = re.sub(r'<invisible>(.*?)</invisible>', r'', md_texto, flags=re.DOTALL)
+	# NOTA: Se removió la regla vieja de <invisible> de esta zona para evitar redundancias.
 
 	## Merge <problem>. Permite en el notebook separar bloques transparentemente.
 	pattern_merge = r'</problem>\s*<problem>'
@@ -171,8 +154,8 @@ def traducir_a_latex(md_texto):
 	md_texto = re.sub(r'<problem>(.*?)</problem>', r'\\begin{problem}\n\1\n\\end{problem}', md_texto, flags=re.DOTALL)
 
 	md_texto = md_texto.replace('&nbsp;', '~')
-	md_texto = md_texto.replace('&ensp;', '\\quad ')   # Espacio equivalente a en-space
-	md_texto = md_texto.replace('&emsp;', '\\qquad ')  # Espacio equivalente a em-space
+	md_texto = md_texto.replace('&ensp;', '\\quad ')   
+	md_texto = md_texto.replace('&emsp;', '\\qquad ')  
 
 	# !!! SOPORTE AUTOMÁTICO PARA ENTORNO FIGURE DE LATEX !!!
 	pattern_fig = r'<latex_fig\s+src=["\'](.*?)["\']\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*/>'
@@ -187,7 +170,6 @@ def traducir_a_latex(md_texto):
 	md_texto = re.sub(pattern_fig, replacement_fig, md_texto, flags=re.DOTALL)
 	md_texto = re.sub(r'\\begin{figure}.*?\\end{figure}', placeholder, md_texto, flags=re.DOTALL)
 
-	# Traduce <latex_table cap="..." lbl="..."> ... </latex_table> de forma segura
 	pattern_tab = r'<latex_table\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*>(.*?)</latex_table>'
 	
 	def table_sub(match):
@@ -195,10 +177,8 @@ def traducir_a_latex(md_texto):
 		label_text = match.group(2).strip()
 		tabla_interna = match.group(3).strip('\n\r')
 		
-		# Quitamos los entornos \begin{center} manuales si existieran para evitar conflictos
 		tabla_limpia = tabla_interna.replace(r'\begin{center}', '').replace(r'\end{center}', '')
 		
-		# Colocamos el caption y el label ABAJO del cuerpo de la tabla
 		return (
 			f"\\begin{{table}}[H]\n"
 			f"\\centering\n"
@@ -225,9 +205,9 @@ def traducir_a_latex(md_texto):
 	md_texto = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', md_texto)
 	md_texto = re.sub(r'`(.*?)`', r'\\texttt{\1}', md_texto)
 	
-	md_texto = re.sub(r'\*(.*?)\*', r'\\textit{\1}', md_texto) # *cursiva*
+	md_texto = re.sub(r'\*(.*?)\*', r'\\textit{\1}', md_texto) 
 
-	md_texto = md_texto.replace('_', '\\_') # Escapar guiones bajos en texto.
+	md_texto = md_texto.replace('_', '\\_') 
 
 	# Procesar listas de ítems.
 	md_texto = re.sub(r'^\s*[\*\-]\s+(.+)$', r'\\item \1', md_texto, flags=re.M)
@@ -242,15 +222,13 @@ def traducir_a_latex(md_texto):
 
 
 
-
-
 #===============================================================================
 # Todo markdown con encabezado:
 # <!-- fgrLib.export_this_markdown("filename_ejemplo.tex") -->
 # genera el archivo especificado en el argumento.
 #===============================================================================
 
-def __________________procesar_notebook_completo(verbose=False):
+def ____procesar_notebook_completo(verbose=False):
 	"""Recorre el notebook de arriba a abajo y exporta bloques por comentario HTML,
 	soportando tanto celdas Markdown como salidas de consola (print) de celdas de código.
 	"""
@@ -332,75 +310,45 @@ def __________________procesar_notebook_completo(verbose=False):
 
 
 
-def procesar_notebook_completo(verbose=False):
-	"""Recorre el notebook de arriba a abajo y exporta bloques por comentario HTML,
-	soportando tanto celdas Markdown como salidas de consola (print) de celdas de código.
-	Si un nuevo archivo arranca con <problem> y el archivo anterior terminó con </problem>,
-	los fusiona en el archivo anterior en lugar de crear uno nuevo.
+import json
+import os
+import re
+
+def ____procesar_notebook_completo(verbose=False):
+	"""Recorre el notebook en dos pasadas:
+	Pasada 1: Procesa el notebook de forma normal traduciendo y generando los archivos 
+	          originales (NNNN_xxxx_iiii.tex) intactos. Al mismo tiempo, agrupa el Markdown 
+	          por prefijo en memoria.
+	Pasada 2: Toma el Markdown consolidado de cada familia (NNNN_xxxx), lo traduce de un 
+	          solo viaje (lo que mergea los <problem> contiguos) y genera un NUEVO archivo 
+	          intermedio consolidado.
 	"""
 	nombre_notebook = get_this_ipynb_filename()
 	
 	with open(nombre_notebook, "r", encoding="utf-8") as f:
 		cells = json.load(f)["cells"]
 		
-	bloque_actual = []
-	archivo_actual = None
-	ultimo_archivo_escrito = None  # 🔄 Guardamos la ruta del último archivo guardado
-	archivos_generados_count = 0  # 🔢 Contador para el reporte final
+	# Diccionario para agrupar el Markdown por prefijo base
+	bloques_unificados = {}  # Clave: "0001_answer" -> Valor: [lista de textos de celdas]
+	orden_prefijos = []      # Guarda el orden cronológico de los prefijos
 	
-	def guardar_bloque(ruta_archivo, contenido_bloque):
-		nonlocal archivos_generados_count, ultimo_archivo_escrito
-		if not contenido_bloque:
-			return
-			
-		texto_md = "".join(contenido_bloque)
-		
-		# 🚨 REGLA DE MERGE ENTRE DIFERENTES ARCHIVOS DE CELDAS CONTIGUAS 🚨
-		# Si este nuevo bloque empieza con <problem> y el archivo anterior terminó en </problem>,
-		# reabrimos el archivo anterior, quitamos el \end{problem} de LaTeX y le metemos el nuevo contenido.
-		if ultimo_archivo_escrito and os.path.exists(ultimo_archivo_escrito) and texto_md.strip().startswith("<problem>"):
-			with open(ultimo_archivo_escrito, "r", encoding="utf-8") as f_prev:
-				contenido_anterior = f_prev.read()
-			
-			# Verificamos si efectivamente el archivo anterior finaliza cerrando un entorno problem
-			if contenido_anterior.strip().endswith("\\end{problem}"):
-				# Quitamos el cierre del entorno del archivo anterior
-				contenido_previo_limpio = contenido_anterior.rstrip().rsplit("\\end{problem}", 1)[0]
-				
-				# Traducimos el bloque nuevo de forma aislada
-				nuevo_latex = traducir_a_latex(texto_md)
-				
-				# Del nuevo LaTeX traducido, le removemos la apertura \begin{problem}
-				if "\\begin{problem}" in nuevo_latex:
-					nuevo_latex_limpio = nuevo_latex.split("\\begin{problem}", 1)[1]
-					
-					# Combinamos todo respetando la estructura interna
-					latex_fusionado = contenido_previo_limpio + "\n" + nuevo_latex_limpio
-					
-					with open(ultimo_archivo_escrito, "w", encoding="utf-8") as f_out:
-						f_out.write(latex_fusionado)
-					if verbose:
-						print(f"⟲ Fusionado y anexado en: {ultimo_archivo_escrito}")
-					return # Salimos temprano porque ya fue absorbido por el anterior
+	archivo_actual = None
+	prefijo_actual = None
+	bloque_actual_celda = []
+	archivos_originales_count = 0
+	archivos_intermedios_count = 0
+	
+	carpeta_salida = os.path.abspath(os.path.join(os.getcwd(), "ipynb.out"))
+	os.makedirs(carpeta_salida, exist_ok=True)
 
-		# Flujo normal si no hay merge entre archivos distintos
-		latex_final = traducir_a_latex(texto_md)
-		os.makedirs(os.path.dirname(ruta_archivo), exist_ok=True)
-		with open(ruta_archivo, "w", encoding="utf-8") as f_out:
-			f_out.write(latex_final)
-		
-		archivos_generados_count += 1
-		ultimo_archivo_escrito = ruta_archivo # Actualizamos el rastro
-		if verbose:
-			print(f"☑ Generado: {ruta_archivo}")
-
+	# ==========================================================================
+	# PASADA 1: TRADUCCIÓN ORIGINAL INDIVIDUAL Y AGRUPAMIENTO EN MEMORIA
+	# ==========================================================================
 	for cell in cells:
 		texto_celda = ""
 		
-		# --- EXTRACTOR DE TEXTO SEGÚN EL TIPO DE CELDA ---
 		if cell["cell_type"] == "markdown":
 			texto_celda = "".join(cell["source"])
-			
 		elif cell["cell_type"] == "code":
 			for output in cell.get("outputs", []):
 				if "data" in output and "text/plain" in output["data"]:
@@ -413,29 +361,191 @@ def procesar_notebook_completo(verbose=False):
 		if not texto_celda.strip():
 			continue
 
-		# --- LÓGICA ÚNICA DE CONTROL Y EXPORTACIÓN ---
 		match = re.search(r'(?m)^\s*<!--\s*fgrLib\.export_this_(?:markdown|output)\("(.*?)"\)\s*-->', texto_celda)
 		
 		if match:
-			if archivo_actual and bloque_actual:
-				guardar_bloque(archivo_actual, bloque_actual)
-				bloque_actual = []
+			# Guardamos el archivo de la celda anterior antes de cambiar de ruta
+			if archivo_actual and bloque_actual_celda:
+				latex_individual = traducir_a_latex("".join(bloque_actual_celda))
+				with open(archivo_actual, "w", encoding="utf-8") as f_out:
+					f_out.write(latex_individual)
+				archivos_originales_count += 1
+				if verbose:
+					print(f"☑ Generado Original: {archivo_actual}")
+				bloque_actual_celda = []
 			
-			archivo_actual = os.path.abspath(os.path.join(os.getcwd(), "ipynb.out", match.group(1)))
+			archivo_original_nombre = match.group(1)  # Ej: "0001_answer_0000.tex"
+			archivo_actual = os.path.join(carpeta_salida, archivo_original_nombre)
+			
+			# Extraemos el prefijo aislando el índice final _iiii
+			match_prefijo = re.match(r'^(\d{4}_[a-zA-Z0-9_]+?)_(\d{4})\.tex$', archivo_original_nombre)
+			if match_prefijo:
+				prefijo_actual = match_prefijo.group(1)  # Ej: "0001_answer"
+			else:
+				prefijo_actual = archivo_original_nombre.replace(".tex", "")
+			
+			if prefijo_actual not in bloques_unificados:
+				bloques_unificados[prefijo_actual] = []
+				orden_prefijos.append(prefijo_actual)
+			
 			texto_celda = texto_celda.replace(match.group(0), "").lstrip('\n')
 		
-		# --- ACUMULACIÓN ORIGINAL INTACTA ---
 		if archivo_actual and texto_celda.strip():
 			if cell["cell_type"] == "markdown" or match:
-				bloque_actual.append(texto_celda + "\n\n")
+				bloque_actual_celda.append(texto_celda + "\n\n")
+				# Acumulamos también en el gran bloque de memoria para la segunda pasada
+				bloques_unificados[prefijo_actual].append(texto_celda + "\n\n")
 				
-	# Guardar el último bloque rezagado al salir de todo el bucle
-	if archivo_actual and bloque_actual:
-		guardar_bloque(archivo_actual, bloque_actual)
+	# Guardar el último archivo original rezagado
+	if archivo_actual and bloque_actual_celda:
+		latex_individual = traducir_a_latex("".join(bloque_actual_celda))
+		with open(archivo_actual, "w", encoding="utf-8") as f_out:
+			f_out.write(latex_individual)
+		archivos_originales_count += 1
+		if verbose:
+			print(f"☑ Generado Original: {archivo_actual}")
 
-	# 📊 REPORTE RESUMIDO
+	# ==========================================================================
+	# PASADA 2: GENERACIÓN DE ARCHIVOS INTERMEDIOS CONSOLIDADOS
+	# ==========================================================================
+	for prefijo in orden_prefijos:
+		contenido_acumulado = "".join(bloques_unificados[prefijo])
+		if not contenido_acumulado.strip():
+			continue
+			
+		# Pasamos el bloque entero. Aquí tu regex de 'traducir_a_latex' 
+		# va a unificar todos los <problem> contiguos en un único entorno.
+		latex_consolidado = traducir_a_latex(contenido_acumulado)
+		
+		# Creamos el nuevo archivo intermedio (Ej: 0001_answer.tex)
+		ruta_archivo_intermedio = os.path.join(carpeta_salida, f"{prefijo}.tex")
+		
+		with open(ruta_archivo_intermedio, "w", encoding="utf-8") as f_out:
+			f_out.write(latex_consolidado)
+			
+		archivos_intermedios_count += 1
+		if verbose:
+			print(f"⚙️ Generado Intermedio Consolidado: {ruta_archivo_intermedio}")
+
 	if not verbose:
-		print(f"☑ Extracción completa. N = {archivos_generados_count} archivos LaTeX (.tex) en 'ipynb.out/'.")
+		print(f"☑ Proceso completo. Originales: {archivos_originales_count} | Nuevos Intermedios (.tex): {archivos_intermedios_count}")
+
+
+def procesar_notebook_completo(verbose=False):
+	"""Recorre el notebook en dos pasadas:
+	Pasada 1: Procesa el notebook de forma normal traduciendo y generando los archivos 
+	          originales (NNNN_xxxx_iiii.tex) intactos. Al mismo tiempo, agrupa el Markdown 
+	          por prefijo en memoria.
+	Pasada 2: Toma el Markdown consolidado de cada familia (NNNN_xxxx), lo traduce de un 
+	          solo viaje (lo que mergea los <problem> contiguos) y genera un NUEVO archivo 
+	          intermedio consolidado.
+	"""
+	nombre_notebook = get_this_ipynb_filename()
+	
+	with open(nombre_notebook, "r", encoding="utf-8") as f:
+		cells = json.load(f)["cells"]
+		
+	# Diccionario para agrupar el Markdown por prefijo base
+	bloques_unificados = {}  # Clave: "0001_answer" -> Valor: [lista de textos de celdas]
+	orden_prefijos = []      # Guarda el orden cronológico de los prefijos
+	
+	archivo_actual = None
+	prefijo_actual = None
+	bloque_actual_celda = []
+	archivos_originales_count = 0
+	archivos_intermedios_count = 0
+	
+	carpeta_salida = os.path.abspath(os.path.join(os.getcwd(), "ipynb.out"))
+	os.makedirs(carpeta_salida, exist_ok=True)
+
+	# ==========================================================================
+	# PASADA 1: TRADUCCIÓN ORIGINAL INDIVIDUAL Y AGRUPAMIENTO EN MEMORIA
+	# ==========================================================================
+	for cell in cells:
+		texto_celda = ""
+		
+		if cell["cell_type"] == "markdown":
+			texto_celda = "".join(cell["source"])
+		elif cell["cell_type"] == "code":
+			for output in cell.get("outputs", []):
+				if "data" in output and "text/plain" in output["data"]:
+					texto_celda = "".join(output["data"]["text/plain"])
+					break
+				elif "text" in output:
+					texto_celda = "".join(output["text"])
+					break
+		
+		if not texto_celda.strip():
+			continue
+
+		match = re.search(r'(?m)^\s*<!--\s*fgrLib\.export_this_(?:markdown|output)\("(.*?)"\)\s*-->', texto_celda)
+		
+		if match:
+			# Guardamos el archivo de la celda anterior antes de cambiar de ruta
+			if archivo_actual and bloque_actual_celda:
+				latex_individual = traducir_a_latex("".join(bloque_actual_celda))
+				with open(archivo_actual, "w", encoding="utf-8") as f_out:
+					f_out.write(latex_individual)
+				archivos_originales_count += 1
+				if verbose:
+					print(f"☑ Generado Original: {archivo_actual}")
+				bloque_actual_celda = []
+			
+			archivo_original_nombre = match.group(1)  # Ej: "0001_answer_0000.tex"
+			archivo_actual = os.path.join(carpeta_salida, archivo_original_nombre)
+			
+			# Extraemos el prefijo aislando el índice final _iiii
+			match_prefijo = re.match(r'^(\d{4}_[a-zA-Z0-9_]+?)_(\d{4})\.tex$', archivo_original_nombre)
+			if match_prefijo:
+				prefijo_actual = match_prefijo.group(1)  # Ej: "0001_answer"
+			else:
+				prefijo_actual = archivo_original_nombre.replace(".tex", "")
+			
+			if prefijo_actual not in bloques_unificados:
+				bloques_unificados[prefijo_actual] = []
+				orden_prefijos.append(prefijo_actual)
+			
+			texto_celda = texto_celda.replace(match.group(0), "").lstrip('\n')
+		
+		if archivo_actual and texto_celda.strip():
+			if cell["cell_type"] == "markdown" or match:
+				bloque_actual_celda.append(texto_celda + "\n\n")
+				# Acumulamos también en el gran bloque de memoria para la segunda pasada
+				bloques_unificados[prefijo_actual].append(texto_celda + "\n\n")
+				
+	# Guardar el último archivo original rezagado
+	if archivo_actual and bloque_actual_celda:
+		latex_individual = traducir_a_latex("".join(bloque_actual_celda))
+		with open(archivo_actual, "w", encoding="utf-8") as f_out:
+			f_out.write(latex_individual)
+		archivos_originales_count += 1
+		if verbose:
+			print(f"☑ Generado Original: {archivo_actual}")
+
+	# ==========================================================================
+	# PASADA 2: GENERACIÓN DE ARCHIVOS INTERMEDIOS CONSOLIDADOS
+	# ==========================================================================
+	for prefijo in orden_prefijos:
+		contenido_acumulado = "".join(bloques_unificados[prefijo])
+		if not contenido_acumulado.strip():
+			continue
+			
+		# Pasamos el bloque entero. Aquí tu regex de 'traducir_a_latex' 
+		# va a unificar todos los <problem> contiguos en un único entorno.
+		latex_consolidado = traducir_a_latex(contenido_acumulado)
+		
+		# Creamos el nuevo archivo intermedio (Ej: 0001_answer.tex)
+		ruta_archivo_intermedio = os.path.join(carpeta_salida, f"{prefijo}.tex")
+		
+		with open(ruta_archivo_intermedio, "w", encoding="utf-8") as f_out:
+			f_out.write(latex_consolidado)
+			
+		archivos_intermedios_count += 1
+		if verbose:
+			print(f"⚙️ Generado Intermedio Consolidado: {ruta_archivo_intermedio}")
+
+	if not verbose:
+		print(f"☑ Proceso de extracción completo. Originales: {archivos_originales_count} | Nuevos Intermedios: {archivos_intermedios_count}")
 
 
 #===============================================================================
@@ -538,7 +648,7 @@ def compilar_pdf_automatico(archivo_principal="tp.tex", clean=True):
 # Para armar todo desde un script usando la consola
 #===============================================================================
 
-def procesar_y_compilar_informe(nombre_notebook, texFile, clean): 
+def ___procesar_y_compilar_informe(nombre_notebook, texFile, clean): 
 	# SILENCIAR ADVERTENCIA DE ZMQ: Oculta el cartel molesto del bucle de eventos asíncronos en Windows 
 	warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*Proactor event loop.*") 
 	
@@ -598,3 +708,119 @@ def procesar_y_compilar_informe(nombre_notebook, texFile, clean):
 	# 4. Salida limpia saltándose los cuelgues de hilos ocultos de Python 3.14 en Windows 
 	os._exit(0)
 
+
+
+
+def procesar_y_compilar_informe(nombre_notebook, texFile, clean): 
+	# SILENCIAR ADVERTENCIA DE ZMQ: Oculta el cartel molesto del bucle de eventos asíncronos en Windows 
+	warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*Proactor event loop.*") 
+	
+	base_dir = os.getcwd() 
+
+	# LIMPIEZA PREVENTIVA AL INICIO: Borra fantasmas de corridas anteriores.
+	ruta_ipynb_out = os.path.abspath(os.path.join(base_dir, "ipynb.out"))
+	if os.path.exists(ruta_ipynb_out):
+		shutil.rmtree(ruta_ipynb_out)
+		print("♻ Limpieza inicial: ipynb.out eliminada.", flush=True)
+
+	# Borrar la carpeta latex/tmp vieja si existe
+	ruta_latex_tmp = os.path.abspath(os.path.join(base_dir, "latex", "tmp"))
+	if os.path.exists(ruta_latex_tmp):
+		shutil.rmtree(ruta_latex_tmp)
+		print("♻ Limpieza inicial: Archivos auxiliares de LaTeX (tmp) eliminados.", flush=True)
+
+	# Convertir la ruta del .tex a RUTA ABSOLUTA para evitar bloqueos de Windows 
+	ruta_tex_absoluta = os.path.abspath(os.path.join(base_dir, "latex", texFile)) 
+	
+	print(f"⛭ Ejecutando Notebook: {nombre_notebook}...", flush=True) 
+	try: 
+		with open(nombre_notebook, "r", encoding="utf-8") as f: 
+			nb = nbformat.read(f, as_version=4) 
+			
+		ep = ExecutePreprocessor(timeout=10, kernel_name="python3") 
+		ep.preprocess(nb, {'metadata': {'path': base_dir}}) 
+		
+		with open(nombre_notebook, "w", encoding="utf-8") as f: 
+			nbformat.write(nb, f) 
+		print("☑ Ejecución celdas ok. Output saved.", flush=True) 
+	except CellExecutionError as e: 
+		print("\n❌ EL NOTEBOOK SE DETUVO PORQUE UNA CELDA TARDÓ DEMASIADO O FALLÓ:", flush=True) 
+		print(e, flush=True) 
+		sys.exit(1) 
+	except Exception as e: 
+		print(f"❌ Error general en la preparación: {e}", flush=True) 
+		sys.exit(1) 
+		
+	print("Generando ipynb.out desde bloques especificados ipynb...", flush=True) 
+	procesar_notebook_completo() 
+
+	# ==========================================================================
+	# >>> ENTORNO ESPEJO TEMPORAL PARA COMPILACIÓN DE MERGES SEGURA <<<
+	# ==========================================================================
+	ruta_ipynb_compile = os.path.abspath(os.path.join(base_dir, "ipynb.out_compile"))
+	ruta_ipynb_backup = os.path.abspath(os.path.join(base_dir, "ipynb.out_original_bak"))
+
+	if os.path.exists(ruta_ipynb_out):
+		print("⚙️ Estructurando entorno de compilación temporal en espejo...", flush=True)
+		# 1. Clonamos ipynb.out intacto en una carpeta temporal de compilación
+		if os.path.exists(ruta_ipynb_compile):
+			shutil.rmtree(ruta_ipynb_compile)
+		shutil.copytree(ruta_ipynb_out, ruta_ipynb_compile)
+		
+		# 2. Hacemos las modificaciones de merge SOLO en la carpeta temporal espejo
+		archivos_en_compile = os.listdir(ruta_ipynb_compile)
+		for archivo in archivos_en_compile:
+			# Validamos que sea un archivo de texto consolidado intermedio (ej: 0001_answer.tex)
+			if archivo.endswith(".tex") and not re.search(r'_\d{4}\.tex$', archivo):
+				prefijo_base = archivo.replace(".tex", "")
+				ruta_consolidada = os.path.join(ruta_ipynb_compile, archivo)
+				
+				with open(ruta_consolidada, "r", encoding="utf-8") as f_cons:
+					contenido_mergeado = f_cons.read()
+				
+				# Buscamos sus archivos hijos individuales asociados (ej: _0000.tex, _0001.tex)
+				patron_hijos = re.compile(rf'^{re.escape(prefijo_base)}_\d{{4}}\.tex$')
+				archivos_hijos = sorted([f for f in archivos_en_compile if patron_hijos.match(f)])
+				
+				for idx, archivo_hijo in enumerate(archivos_hijos):
+					ruta_hijo = os.path.join(ruta_ipynb_compile, archivo_hijo)
+					with open(ruta_hijo, "w", encoding="utf-8") as f_hijo:
+						if idx == 0:
+							# El archivo _0000 absorbe TODO el contenido mergeado de un viaje
+							f_hijo.write(contenido_mergeado)
+						else:
+							# Los archivos _0001, _0002, etc., quedan vacíos para no duplicar en el PDF
+							f_hijo.write(f"% Contenido absorbido unificadamente en el archivo _0000 de {prefijo_base}\n")
+
+		# 3. Intercambiamos las carpetas en caliente para engañar a LaTeX:
+		# Resguardamos la original intacta y ponemos la clonada modificada como 'ipynb.out'
+		os.rename(ruta_ipynb_out, ruta_ipynb_backup)
+		os.rename(ruta_ipynb_compile, ruta_ipynb_out)
+	# ==========================================================================
+
+	print("⛭ Compilando LaTeX...", flush=True) 
+	
+	try:
+		import gc 
+		gc.set_threshold(0) 
+		
+		# Invocamos la compilación. LaTeX leerá la carpeta 'ipynb.out' modificada temporalmente
+		compilar_pdf_automatico(ruta_tex_absoluta, clean) 
+	finally:
+		# ==========================================================================
+		# >>> RESTAURACIÓN DE SEGURIDAD INDESTRUCTIBLE EN EL FINALLY <<<
+		# ==========================================================================
+		# Ocurra lo que ocurra (termine bien o falle LaTeX), devolvemos tus archivos 
+		# originales exactamente a su lugar en ipynb.out y borramos la basura temporal.
+		if os.path.exists(ruta_ipynb_backup):
+			if os.path.exists(ruta_ipynb_out):
+				shutil.rmtree(ruta_ipynb_out) # Borramos la modificada de compilación
+			os.rename(ruta_ipynb_backup, ruta_ipynb_out) # Restauramos tu carpeta original intacta
+			print("☑ Restauración completa: Tus archivos originales en ipynb.out quedaron intactos.", flush=True)
+		
+		if os.path.exists(ruta_ipynb_compile):
+			shutil.rmtree(ruta_ipynb_compile)
+		# ==========================================================================
+
+	# 4. Salida limpia saltándose los cuelgues de hilos ocultos de Python
+	os._exit(0)
