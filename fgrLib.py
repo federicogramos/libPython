@@ -142,6 +142,7 @@ def traducir_a_latex(md_texto):
 	# Estructuras que nunca se anidan dentro de si mismas
 	#---------------------------------------------------------------------------
 
+
 	# 1. Títulos CENTRADOS (Mismo mecanismo de espaciado uniforme)
 	md_texto = re.sub(r'^####\s+<center>\s*(.*?)\s*</center>$', fr'{{\\centering \\normalsize \1\\par}}\\vspace*{{{ESP_CENTER_H4}}}', md_texto, flags=re.M)
 	md_texto = re.sub(r'^###\s+<center>\s*(.*?)\s*</center>$', fr'{{\\centering \\large \1\\par}}\\vspace*{{{ESP_CENTER_H3}}}', md_texto, flags=re.M)
@@ -160,6 +161,11 @@ def traducir_a_latex(md_texto):
 
 	# CONTENIDO INVISIBLE
 	md_texto = re.sub(r'<invisible>(.*?)</invisible>', r'', md_texto, flags=re.DOTALL)
+
+	## Merge <problem>. Permite en el notebook separar bloques transparentemente.
+	pattern_merge = r'</problem>\s*<problem>'
+	while re.search(pattern_merge, md_texto, flags=re.DOTALL):
+		md_texto = re.sub(pattern_merge, '\n', md_texto, flags=re.DOTALL)
 
 	# <problem>
 	md_texto = re.sub(r'<problem>(.*?)</problem>', r'\\begin{problem}\n\1\n\\end{problem}', md_texto, flags=re.DOTALL)
@@ -244,7 +250,7 @@ def traducir_a_latex(md_texto):
 # genera el archivo especificado en el argumento.
 #===============================================================================
 
-def procesar_notebook_completo(verbose=False):
+def __________________procesar_notebook_completo(verbose=False):
 	"""Recorre el notebook de arriba a abajo y exporta bloques por comentario HTML,
 	soportando tanto celdas Markdown como salidas de consola (print) de celdas de código.
 	"""
@@ -325,10 +331,117 @@ def procesar_notebook_completo(verbose=False):
 		print(f"☑ Extracción completa. N = {archivos_generados_count} archivos LaTeX (.tex) en 'ipynb.out/'.")
 
 
+
+def procesar_notebook_completo(verbose=False):
+	"""Recorre el notebook de arriba a abajo y exporta bloques por comentario HTML,
+	soportando tanto celdas Markdown como salidas de consola (print) de celdas de código.
+	Si un nuevo archivo arranca con <problem> y el archivo anterior terminó con </problem>,
+	los fusiona en el archivo anterior en lugar de crear uno nuevo.
+	"""
+	nombre_notebook = get_this_ipynb_filename()
+	
+	with open(nombre_notebook, "r", encoding="utf-8") as f:
+		cells = json.load(f)["cells"]
+		
+	bloque_actual = []
+	archivo_actual = None
+	ultimo_archivo_escrito = None  # 🔄 Guardamos la ruta del último archivo guardado
+	archivos_generados_count = 0  # 🔢 Contador para el reporte final
+	
+	def guardar_bloque(ruta_archivo, contenido_bloque):
+		nonlocal archivos_generados_count, ultimo_archivo_escrito
+		if not contenido_bloque:
+			return
+			
+		texto_md = "".join(contenido_bloque)
+		
+		# 🚨 REGLA DE MERGE ENTRE DIFERENTES ARCHIVOS DE CELDAS CONTIGUAS 🚨
+		# Si este nuevo bloque empieza con <problem> y el archivo anterior terminó en </problem>,
+		# reabrimos el archivo anterior, quitamos el \end{problem} de LaTeX y le metemos el nuevo contenido.
+		if ultimo_archivo_escrito and os.path.exists(ultimo_archivo_escrito) and texto_md.strip().startswith("<problem>"):
+			with open(ultimo_archivo_escrito, "r", encoding="utf-8") as f_prev:
+				contenido_anterior = f_prev.read()
+			
+			# Verificamos si efectivamente el archivo anterior finaliza cerrando un entorno problem
+			if contenido_anterior.strip().endswith("\\end{problem}"):
+				# Quitamos el cierre del entorno del archivo anterior
+				contenido_previo_limpio = contenido_anterior.rstrip().rsplit("\\end{problem}", 1)[0]
+				
+				# Traducimos el bloque nuevo de forma aislada
+				nuevo_latex = traducir_a_latex(texto_md)
+				
+				# Del nuevo LaTeX traducido, le removemos la apertura \begin{problem}
+				if "\\begin{problem}" in nuevo_latex:
+					nuevo_latex_limpio = nuevo_latex.split("\\begin{problem}", 1)[1]
+					
+					# Combinamos todo respetando la estructura interna
+					latex_fusionado = contenido_previo_limpio + "\n" + nuevo_latex_limpio
+					
+					with open(ultimo_archivo_escrito, "w", encoding="utf-8") as f_out:
+						f_out.write(latex_fusionado)
+					if verbose:
+						print(f"⟲ Fusionado y anexado en: {ultimo_archivo_escrito}")
+					return # Salimos temprano porque ya fue absorbido por el anterior
+
+		# Flujo normal si no hay merge entre archivos distintos
+		latex_final = traducir_a_latex(texto_md)
+		os.makedirs(os.path.dirname(ruta_archivo), exist_ok=True)
+		with open(ruta_archivo, "w", encoding="utf-8") as f_out:
+			f_out.write(latex_final)
+		
+		archivos_generados_count += 1
+		ultimo_archivo_escrito = ruta_archivo # Actualizamos el rastro
+		if verbose:
+			print(f"☑ Generado: {ruta_archivo}")
+
+	for cell in cells:
+		texto_celda = ""
+		
+		# --- EXTRACTOR DE TEXTO SEGÚN EL TIPO DE CELDA ---
+		if cell["cell_type"] == "markdown":
+			texto_celda = "".join(cell["source"])
+			
+		elif cell["cell_type"] == "code":
+			for output in cell.get("outputs", []):
+				if "data" in output and "text/plain" in output["data"]:
+					texto_celda = "".join(output["data"]["text/plain"])
+					break
+				elif "text" in output:
+					texto_celda = "".join(output["text"])
+					break
+		
+		if not texto_celda.strip():
+			continue
+
+		# --- LÓGICA ÚNICA DE CONTROL Y EXPORTACIÓN ---
+		match = re.search(r'(?m)^\s*<!--\s*fgrLib\.export_this_(?:markdown|output)\("(.*?)"\)\s*-->', texto_celda)
+		
+		if match:
+			if archivo_actual and bloque_actual:
+				guardar_bloque(archivo_actual, bloque_actual)
+				bloque_actual = []
+			
+			archivo_actual = os.path.abspath(os.path.join(os.getcwd(), "ipynb.out", match.group(1)))
+			texto_celda = texto_celda.replace(match.group(0), "").lstrip('\n')
+		
+		# --- ACUMULACIÓN ORIGINAL INTACTA ---
+		if archivo_actual and texto_celda.strip():
+			if cell["cell_type"] == "markdown" or match:
+				bloque_actual.append(texto_celda + "\n\n")
+				
+	# Guardar el último bloque rezagado al salir de todo el bucle
+	if archivo_actual and bloque_actual:
+		guardar_bloque(archivo_actual, bloque_actual)
+
+	# 📊 REPORTE RESUMIDO
+	if not verbose:
+		print(f"☑ Extracción completa. N = {archivos_generados_count} archivos LaTeX (.tex) en 'ipynb.out/'.")
+
+
 #===============================================================================
 #===============================================================================
 
-def compilar_pdf_automatico(archivo_principal="tp.tex"):
+def compilar_pdf_automatico(archivo_principal="tp.tex", clean=True):
 
 	"""Compila el archivo .tex principal a PDF de forma segura y sin colgarse."""
 	if not os.path.exists(archivo_principal):
@@ -390,19 +503,24 @@ def compilar_pdf_automatico(archivo_principal="tp.tex"):
 
 		if resultado.returncode == 0:
 
-			# ESTRATEGIA DE LIMPIEZA: Solo si la compilación fue exitosa
-			ruta_ipynb_out = os.path.abspath(os.path.join(os.getcwd(), "ipynb.out"))
-			if os.path.exists(ruta_ipynb_out):
-				shutil.rmtree(ruta_ipynb_out)
-				print("➔ Carpeta ipynb.out eliminada tras compilar LaTeX  ok.", flush=True)
-
-			# 2. Eliminar carpeta latex/tmp (NUEVO)
-			ruta_latex_tmp = os.path.abspath(os.path.join(os.getcwd(), "latex", "tmp"))
-			if os.path.exists(ruta_latex_tmp):
-				shutil.rmtree(ruta_latex_tmp)
-				print("➔ Archivos /latex/tmp/ eliminados tras compilar LaTeX ok.", flush=True)
-
 			print("✅ PDF generado y actualizado ok.")
+
+			if clean==True:
+
+				# ESTRATEGIA DE LIMPIEZA: Solo si la compilación fue exitosa
+				ruta_ipynb_out = os.path.abspath(os.path.join(os.getcwd(), "ipynb.out"))
+				if os.path.exists(ruta_ipynb_out):
+					shutil.rmtree(ruta_ipynb_out)
+					print("➔ Carpeta ipynb.out eliminada tras compilar LaTeX  ok.", flush=True)
+
+				# 2. Eliminar carpeta latex/tmp (NUEVO)
+				ruta_latex_tmp = os.path.abspath(os.path.join(os.getcwd(), "latex", "tmp"))
+				if os.path.exists(ruta_latex_tmp):
+					shutil.rmtree(ruta_latex_tmp)
+					print("➔ Archivos /latex/tmp/ eliminados tras compilar LaTeX ok.", flush=True)
+
+			else:
+				print("⚠ [clean = 0] Archivos auxiliares no eliminados.")
 
 		else:
 			print("❌ Error de compilación en LaTeX. Revisa el archivo log o la sintaxis.")
@@ -420,7 +538,7 @@ def compilar_pdf_automatico(archivo_principal="tp.tex"):
 # Para armar todo desde un script usando la consola
 #===============================================================================
 
-def procesar_y_compilar_informe(nombre_notebook, texFile): 
+def procesar_y_compilar_informe(nombre_notebook, texFile, clean): 
 	# SILENCIAR ADVERTENCIA DE ZMQ: Oculta el cartel molesto del bucle de eventos asíncronos en Windows 
 	warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*Proactor event loop.*") 
 	
@@ -473,7 +591,7 @@ def procesar_y_compilar_informe(nombre_notebook, texFile):
 	gc.set_threshold(0) 
 	
 	# Invocamos tu función original pasándole la ruta absoluta blindada 
-	compilar_pdf_automatico(ruta_tex_absoluta) 
+	compilar_pdf_automatico(ruta_tex_absoluta, clean) 
 
 
 	
