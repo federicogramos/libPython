@@ -56,7 +56,7 @@ def get_this_ipynb_filename():
 # Aísla formulas matemáticas y traduce HTML+Markdown imitando bloque.
 #===============================================================================
 
-def traducir_a_latex(md_texto):
+def ___traducir_a_latex(md_texto):
 
 	ESP_CENTER_H1 = "1.0ex"
 	ESP_CENTER_H2 = "0ex"
@@ -212,6 +212,191 @@ def traducir_a_latex(md_texto):
 	md_texto = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', md_texto)
 	md_texto = re.sub(r'`(.*?)`', r'\\texttt{\1}', md_texto)
 	
+	md_texto = re.sub(r'\*(.*?)\*', r'\\textit{\1}', md_texto) 
+
+	md_texto = md_texto.replace('_', '\\_') 
+
+	# Procesar listas de ítems.
+	md_texto = re.sub(r'^\s*[\*\-]\s+(.+)$', r'\\item \1', md_texto, flags=re.M)
+	md_texto = re.sub(r'((?:\\item .+(?:\n|$))+)', r'\\begin{itemize}\n\1\\end{itemize}', md_texto)
+	
+	# --- PARCHE DE RESTAURACIÓN CON DOBLE PASADA DE LIMPIEZA ---
+	for _ in range(2):
+		for key, original_math in math_blocks.items():
+			md_texto = md_texto.replace(key, original_math)
+		
+	return md_texto
+
+################ probar code name=c o verilog 
+def traducir_a_latex(md_texto):
+
+	ESP_CENTER_H1 = "1.0ex"
+	ESP_CENTER_H2 = "0ex"
+	ESP_CENTER_H3 = "0ex"
+	ESP_CENTER_H4 = "-0.5ex"
+
+	ESP_LEFT_H1   = "1.0ex"
+	ESP_LEFT_H2   = "0ex"
+	ESP_LEFT_H3   = "0ex"
+	ESP_LEFT_H4   = "-0.5ex"
+
+	ESP_CENTER_GENERIC = "0ex"
+
+	ESP_BREAK = "-0.5ex"
+
+	
+	math_blocks = {}
+	def placeholder(match):
+		key = f"MATHBLOCKX{len(math_blocks)}X"
+		math_blocks[key] = match.group(0)
+		return key
+	
+	# NUEVA LÓGICA: Procesa la etiqueta <code> detectando el atributo 'name' opcional
+	def code_placeholder(match):
+		key = f"MATHBLOCKX{len(math_blocks)}X"
+		
+		# Capturamos los atributos (si existen) y el código interno
+		atributos = match.group(1) if match.group(1) else ""
+		codigo_interno = match.group(2).strip('\n\r')
+		
+		# Buscamos si tiene el parámetro name="lenguaje" o name='lenguaje'
+		match_lang = re.search(r'name=["\'](.*?)["\']', atributos)
+		
+		if match_lang:
+			lang = match_lang.group(1).lower().strip()
+			if lang in ["verilog", "vlog"]:
+				estilo = "estiloVerilog"
+			elif lang in ["c", "cpp", "c++"]:
+				estilo = "estiloC"
+			elif lang in ["python", "py"]:
+				estilo = "estiloPython"
+			else:
+				estilo = "estiloPython" # Fallback por si escribís cualquier otra cosa
+		else:
+			# Si usás <code> a secas, mantiene tu comportamiento viejo (Python)
+			estilo = "estiloPython"
+			
+		math_blocks[key] = f"\\begin{{lstlisting}}[style={estilo}]\n{codigo_interno}\n\\end{{lstlisting}}"
+		return key
+
+	# Expresión regular modificada para capturar <code ...> o simplemente <code>
+	md_texto = re.sub(r'<code([^>]*?)>(.*?)</code>', code_placeholder, md_texto, flags=re.DOTALL)
+
+	# Proteger ecuaciones intactas ($$ y $)
+	md_texto = re.sub(r'\$\$.*?\$\$', placeholder, md_texto, flags=re.DOTALL)
+	md_texto = re.sub(r'\$.*?\$', placeholder, md_texto)
+
+	# =========================================================================
+	# 🚨 SOLUCIÓN ATÓMICA: ELIMINACIÓN DE CONTENIDO INVISIBLE EN PRIMERA PASADA
+	# =========================================================================
+	md_texto = re.sub(r'(?m)^#*\s*<invisible>.*?</invisible>\s*\n?', '', md_texto, flags=re.DOTALL)
+	# =========================================================================
+
+	for _ in range(3):
+		# 1. blocknote para citas en gris
+		md_texto = re.sub(r'<blocknote>(.*?)</blocknote>', r'\\begin{quote}\n\\color{gray}\n\1\n\\end{quote}', md_texto, flags=re.DOTALL)
+		
+		# 2. color name="..." dinámico
+		md_texto = re.sub(r'<color\s+name=["\'](.*?)["\']>(.*?)</color>', r'{\\color{\1}\2}', md_texto, flags=re.DOTALL)
+		
+		# <font name="tt"|"sf"|"rm">
+		def font_sub(match):
+			tipo = match.group(1).strip().lower()
+			contenido = match.group(2)
+			fuentes = {
+				'tt': 'texttt', 
+				'sf': 'textsf', 
+				'rm': 'textrm',  
+				'sc': 'textsc'  
+			}
+			comando = fuentes.get(tipo, 'texttt')
+			return f"\\{comando}{{{contenido}}}"
+		md_texto = re.sub(r'<font\s+name=["\'](.*?)["\']>(.*?)</font>', font_sub, md_texto, flags=re.DOTALL)
+
+
+	def anchor_sub(match):
+		url_real = match.group(1).strip()
+		texto_visible = match.group(2)
+		texto_visible = texto_visible.replace('_', '\\_')
+		
+		latex_href = f"\\href{{{url_real}}}{{{texto_visible}}}"
+		
+		class FakeMatch:
+			def __init__(self, val): self.val = val
+			def group(self, num): return self.val
+		return placeholder(FakeMatch(latex_href))
+
+	md_texto = re.sub(r'<a\s+href=["\'](.*?)["\']\s*>(.*?)</a>', anchor_sub, md_texto, flags=re.DOTALL)
+
+
+	md_texto = re.sub(r'^####\s+<center>\s*(.*?)\s*</center>$', fr'{{\\centering \\normalsize \1\\par}}\\vspace*{{{ESP_CENTER_H4}}}', md_texto, flags=re.M)
+	md_texto = re.sub(r'^###\s+<center>\s*(.*?)\s*</center>$', fr'{{\\centering \\large \1\\par}}\\vspace*{{{ESP_CENTER_H3}}}', md_texto, flags=re.M)
+	md_texto = re.sub(r'^##\s+<center>\s*(.*?)\s*</center>$', fr'{{\\centering \\Large \1\\par}}\\vspace*{{{ESP_CENTER_H2}}}', md_texto, flags=re.M)
+	md_texto = re.sub(r'^#\s+<center>\s*(.*?)\s*</center>$', fr'{{\\centering \\LARGE \1\\par}}\\vspace*{{{ESP_CENTER_H1}}}', md_texto, flags=re.M)
+
+	md_texto = re.sub(r'^####\s+(.+)$', fr'\\noindent{{\\normalsize \1\\par}}\\vspace*{{{ESP_LEFT_H4}}}', md_texto, flags=re.M)
+	md_texto = re.sub(r'^###\s+(.+)$', fr'\\noindent{{\\large \1\\par}}\\vspace*{{{ESP_LEFT_H3}}}', md_texto, flags=re.M)
+	md_texto = re.sub(r'^##\s+(.+)$', fr'\\noindent{{\\Large \1\\par}}\\vspace*{{{ESP_LEFT_H2}}}', md_texto, flags=re.M)
+	md_texto = re.sub(r'^#\s+(.+)$', fr'\\noindent{{\\LARGE \1\\par}}\\vspace*{{{ESP_LEFT_H1}}}', md_texto, flags=re.M)
+
+	md_texto = re.sub(r'<center>(.*?)</center>', fr'{{\\centering \1\\par}}\\vspace*{{{ESP_CENTER_GENERIC}}}', md_texto, flags=re.DOTALL)
+	md_texto = re.sub(r'<b>(.*?)</b>', r'\\textbf{\1}', md_texto, flags=re.DOTALL)
+
+	## Merge <problem>.
+	pattern_merge = r'</problem>\s*<problem>'
+	while re.search(pattern_merge, md_texto, flags=re.DOTALL):
+		md_texto = re.sub(pattern_merge, '\n', md_texto, flags=re.DOTALL)
+
+	# <problem>
+	md_texto = re.sub(r'<problem>(.*?)</problem>', r'\\begin{problem}\n\1\n\\end{problem}', md_texto, flags=re.DOTALL)
+
+	md_texto = md_texto.replace('&nbsp;', '~')
+	md_texto = md_texto.replace('&ensp;', '\\quad ')   
+	md_texto = md_texto.replace('&emsp;', '\\qquad ')  
+
+	# !!! SOPORTE AUTOMÁTICO PARA ENTORNO FIGURE DE LATEX !!!
+	pattern_fig = r'<latex_fig\s+src=["\'](.*?)["\']\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*/>'
+	replacement_fig = (
+		r'\\begin{figure}[H]\n'
+		r'\\centering\n'
+		r'\\includegraphics[width=0.85\\textwidth]{\1}\n'
+		r'\\caption{\2}\n'
+		r'\\label{\3}\n'
+		r'\\end{figure}'
+	)
+	md_texto = re.sub(pattern_fig, replacement_fig, md_texto, flags=re.DOTALL)
+	md_texto = re.sub(r'\\begin{figure}.*?\\end{figure}', placeholder, md_texto, flags=re.DOTALL)
+
+	pattern_tab = r'<latex_table\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*>(.*?)</latex_table>'
+	
+	def table_sub(match):
+		caption_text = match.group(1).strip()
+		label_text = match.group(2).strip()
+		tabla_interna = match.group(3).strip('\n\r')
+		tabla_limpia = tabla_interna.replace(r'\begin{center}', '').replace(r'\end{center}', '')
+		return (
+			f"\\begin{{table}}[H]\n"
+			f"\\centering\n"
+			f"{tabla_limpia}\n"
+			f"\\caption{{{caption_text}}}\n"
+			f"\\label{{{label_text}}}\n"
+			f"\\end{{table}}"
+		)
+		
+	md_texto = re.sub(pattern_tab, table_sub, md_texto, flags=re.DOTALL)
+	md_texto = re.sub(r'\\begin{table}.*?\\end{table}', placeholder, md_texto, flags=re.DOTALL)
+
+	# !!! 1. SI EL <br/> ESTÁ SOLO !!!
+	md_texto = re.sub(r'^\s*</?br\s*/?>\s*$', fr'~\\par\\vspace*{{{ESP_BREAK}}}', md_texto, flags=re.M | re.IGNORECASE)
+		
+	# !!! 2. SI EL <br/> ESTÁ EN LINEA !!!
+	md_texto = re.sub(r'</?br\s*/?>', r'\\\\ ', md_texto, flags=re.IGNORECASE)
+
+	md_texto = re.sub(r'^---\s*$', r'\\hrule\n\\vspace{0.4cm}', md_texto, flags=re.M)
+	
+	# Formatear estilos básicos de texto plano.
+	md_texto = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', md_texto)
+	md_texto = re.sub(r'`(.*?)`', r'\\texttt{\1}', md_texto)
 	md_texto = re.sub(r'\*(.*?)\*', r'\\textit{\1}', md_texto) 
 
 	md_texto = md_texto.replace('_', '\\_') 
