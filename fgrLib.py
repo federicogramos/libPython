@@ -9,6 +9,13 @@
 ## -- Por defecto no hay margen en 1er linea de parrafo. Usar &emsp; de ser neces
 ## 	 ario.
 
+################################################################################
+## TO-DO: \input{../ipynb.out/0000_\i.tex} que reside en main.tex cambiar los 
+## nombres de carpeta, podria ser ipynb.out.merge
+## ruta_ipynb_backup y todo el malabar que se hace, volarlo. Mantener el merge
+## si es que el usuario quiere.
+################################################################################
+
 
 import os
 import json
