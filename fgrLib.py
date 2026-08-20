@@ -290,14 +290,15 @@ def traducir_a_latex(md_texto):
 		key = f"MATHBLOCKX{len(math_blocks)}X"
 		math_blocks[key] = bloque_latex
 		return key
-	
+
+	## <code name="bash" lbl="codigo_bash_00">. La label permite hacer referencias latex.
 	def code_placeholder(match):
 		key = f"MATHBLOCKX{len(math_blocks)}X"
 		atributos = match.group(1) if match.group(1) else ""
 		codigo_interno = match.group(2).strip('\n\r')
 		
+		# 1. Detectar el lenguaje (Tu lógica actual)
 		match_lang = re.search(r'name=["\'](.*?)["\']', atributos)
-		
 		if match_lang:
 			lang = match_lang.group(1).lower().strip()
 			if lang in ["verilog", "vlog"]:
@@ -313,7 +314,16 @@ def traducir_a_latex(md_texto):
 		else:
 			estilo = "estiloPython"
 			
-		math_blocks[key] = f"\\begin{{lstlisting}}[style={estilo}]\n{codigo_interno}\n\\end{{lstlisting}}"
+		# 🔥 NUEVA LÓGICA: Detectar si hay un atributo lbl="..." para la referencia
+		match_lbl = re.search(r'lbl=["\'](.*?)["\']', atributos)
+		if match_lbl:
+			label_val = match_lbl.group(1).strip()
+			opciones_lst = f"style={estilo},label={label_val}"
+		else:
+			opciones_lst = f"style={estilo}"
+			
+		# Se inyectan las opciones dinámicas en el entorno lstlisting
+		math_blocks[key] = f"\\begin{{lstlisting}}[{opciones_lst}]\n{codigo_interno}\n\\end{{lstlisting}}"
 		return key
 
 	# 1. Aislar bloques de código y ecuaciones
