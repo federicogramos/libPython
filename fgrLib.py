@@ -125,6 +125,28 @@ def traducir_a_latex(md_texto):
 		math_blocks[key] = f"\\begin{{lstlisting}}[{opciones_lst}]\n{codigo_interno}\n\\end{{lstlisting}}"
 		return key
 
+	#  PEGÁ EL BLOQUE DE LAS TABLAS EXACTAMENTE ACÁ:
+	pattern_tab = r'<latex_table\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*>(.*?)</latex_table>'
+	def table_sub(match):
+		caption_text = match.group(1).strip()
+		label_text = match.group(2).strip()
+		tabla_interna = match.group(3).strip('\n\r')
+		tabla_limpia = tabla_interna.replace(r'\begin{center}', '').replace(r'\end{center}', '')
+		latex_table_str = (
+			f"\\begin{{table}}[H]\n"
+			f"\\centering\n"
+			f"{tabla_limpia}\n"
+			f"\\caption{{{caption_text}}}\n"
+			f"\\label{{{label_text}}}\n"
+			f"\\end{{table}}"
+		)
+		class FakeMatch:
+			def __init__(self, val): self.val = val
+			def group(self, num): return self.val
+		return placeholder(FakeMatch(latex_table_str))
+	md_texto = re.sub(pattern_tab, table_sub, md_texto, flags=re.DOTALL)
+
+
 	# 1. Aislar bloques de código y ecuaciones
 	md_texto = re.sub(r'<code([^>]*?)>(.*?)</code>', code_placeholder, md_texto, flags=re.DOTALL)
 	md_texto = re.sub(r'\$\$.*?\$\$', placeholder, md_texto, flags=re.DOTALL)
@@ -150,44 +172,9 @@ def traducir_a_latex(md_texto):
 	md_texto = re.sub(pattern_fig, replacement_fig, md_texto, flags=re.DOTALL)
 	md_texto = re.sub(r'\\begin{figure}.*?\\end{figure}', placeholder, md_texto, flags=re.DOTALL)
 
-	pattern_tab = r'<latex_table\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*>(.*?)</latex_table>'
-	
-	def table_sub(match):
-		caption_text = match.group(1).strip()
-		label_text = match.group(2).strip()
-		tabla_interna = match.group(3).strip('\n\r')
-		tabla_limpia = tabla_interna.replace(r'\begin{center}', '').replace(r'\end{center}', '')
-		#return (  ====================> para arreglar _ en nombres dentro de tabla
-		#	f"\\begin{{table}}[H]\n"
-		#	f"\\centering\n"
-		#	f"{tabla_limpia}\n"
-		#	f"\\caption{{{caption_text}}}\n"
-		#	f"\\label{{{label_text}}}\n"
-		#	f"\\end{{table}}"
-
-	#  ESTO SE AGREGA EN SU LUGAR para no reemplazar falsamente los _:
-		latex_table_str = (
-			f"\\begin{{table}}[H]\n"
-			f"\\centering\n"
-			f"{tabla_limpia}\n"
-			f"\\caption{{{caption_text}}}\n"
-			f"\\label{{{label_text}}}\n"
-			f"\\end{{table}}"
-		)
-		
-		class FakeMatch:
-			def __init__(self, val): self.val = val
-			def group(self, num): return self.val
-			
-		return placeholder(FakeMatch(latex_table_str))
-
-	
-		
-	md_texto = re.sub(pattern_tab, table_sub, md_texto, flags=re.DOTALL)
-	##################################md_texto = re.sub(r'\\begin{table}.*?\\end{table}', placeholder, md_texto)
 
 	# 3. Escapar guiones bajos del texto común
-	md_texto = md_texto.replace('_', '\\_') 
+	################################################md_texto = md_texto.replace('_', '\\_') 
 
 	# =========================================================================
 	# 🚨 NUEVO ORDEN: PROCESAR ENTORNOS DE TEXTO BÁSICOS ANTES QUE LOS TÍTULOS
@@ -256,7 +243,9 @@ def traducir_a_latex(md_texto):
 	# Listas
 	md_texto = re.sub(r'^\s*[\*\-]\s+(.+)$', r'\\item \1', md_texto, flags=re.M)
 	md_texto = re.sub(r'((?:\\item .+(?:\n|$))+)', r'\\begin{itemize}\n\1\\end{itemize}', md_texto)
-	
+	md_texto = re.sub(r'\\ref\{[^{}]+\}', placeholder, md_texto)
+	md_texto = md_texto.replace('_', '\\_') 
+
 	# Restauración final de placeholders
 	for _ in range(2):
 		for key, original_content in math_blocks.items():

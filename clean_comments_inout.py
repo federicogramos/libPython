@@ -49,22 +49,6 @@ def traducir_a_latex(md_texto):
 			opciones_lst = f"style={estilo}"
 		math_blocks[key] = f"\\begin{{lstlisting}}[{opciones_lst}]\n{codigo_interno}\n\\end{{lstlisting}}"
 		return key
-	md_texto = re.sub(r'<code([^>]*?)>(.*?)</code>', code_placeholder, md_texto, flags=re.DOTALL)
-	md_texto = re.sub(r'\$\$.*?\$\$', placeholder, md_texto, flags=re.DOTALL)
-	md_texto = re.sub(r'\$.*?\$', placeholder, md_texto)
-	md_texto = re.sub(r'\\[a-zA-Z]+\{[^{}]+\}', placeholder, md_texto)
-	md_texto = re.sub(r'(?m)^#*\s*<invisible>.*?</invisible>\s*\n?', '', md_texto, flags=re.DOTALL)
-	pattern_fig = r'<latex_fig\s+src=["\'](.*?)["\']\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*/>'
-	replacement_fig = (
-		r'\\begin{figure}[H]\n'
-		r'\\centering\n'
-		r'\\includegraphics[width=0.85\\textwidth]{\1}\n'
-		r'\\caption{\2}\n'
-		r'\\label{\3}\n'
-		r'\\end{figure}'
-	)
-	md_texto = re.sub(pattern_fig, replacement_fig, md_texto, flags=re.DOTALL)
-	md_texto = re.sub(r'\\begin{figure}.*?\\end{figure}', placeholder, md_texto, flags=re.DOTALL)
 	pattern_tab = r'<latex_table\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*>(.*?)</latex_table>'
 	def table_sub(match):
 		caption_text = match.group(1).strip()
@@ -84,6 +68,22 @@ def traducir_a_latex(md_texto):
 			def group(self, num): return self.val
 		return placeholder(FakeMatch(latex_table_str))
 	md_texto = re.sub(pattern_tab, table_sub, md_texto, flags=re.DOTALL)
+	md_texto = re.sub(r'<code([^>]*?)>(.*?)</code>', code_placeholder, md_texto, flags=re.DOTALL)
+	md_texto = re.sub(r'\$\$.*?\$\$', placeholder, md_texto, flags=re.DOTALL)
+	md_texto = re.sub(r'\$.*?\$', placeholder, md_texto)
+	md_texto = re.sub(r'\\[a-zA-Z]+\{[^{}]+\}', placeholder, md_texto)
+	md_texto = re.sub(r'(?m)^#*\s*<invisible>.*?</invisible>\s*\n?', '', md_texto, flags=re.DOTALL)
+	pattern_fig = r'<latex_fig\s+src=["\'](.*?)["\']\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*/>'
+	replacement_fig = (
+		r'\\begin{figure}[H]\n'
+		r'\\centering\n'
+		r'\\includegraphics[width=0.85\\textwidth]{\1}\n'
+		r'\\caption{\2}\n'
+		r'\\label{\3}\n'
+		r'\\end{figure}'
+	)
+	md_texto = re.sub(pattern_fig, replacement_fig, md_texto, flags=re.DOTALL)
+	md_texto = re.sub(r'\\begin{figure}.*?\\end{figure}', placeholder, md_texto, flags=re.DOTALL)
 	md_texto = md_texto.replace('_', '\\_') 
 	md_texto = re.sub(r'<b>(.*?)</b>', r'\\textbf{\1}', md_texto, flags=re.DOTALL)
 	md_texto = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', md_texto)
@@ -129,6 +129,7 @@ def traducir_a_latex(md_texto):
 	md_texto = re.sub(r'^---\s*$', r'\\hrule\n\\vspace{0.4cm}', md_texto, flags=re.M)
 	md_texto = re.sub(r'^\s*[\*\-]\s+(.+)$', r'\\item \1', md_texto, flags=re.M)
 	md_texto = re.sub(r'((?:\\item .+(?:\n|$))+)', r'\\begin{itemize}\n\1\\end{itemize}', md_texto)
+	md_texto = re.sub(r'\\ref\{[^{}]+\}', placeholder, md_texto)
 	for _ in range(2):
 		for key, original_content in math_blocks.items():
 			md_texto = md_texto.replace(key, original_content)
