@@ -135,7 +135,7 @@ def traducir_a_latex(md_texto):
 	md_texto = re.sub(r'\\[a-zA-Z]+\{[^{}]+\}', placeholder, md_texto)
 
 	# 2. Eliminación de contenido invisible
-	md_texto = re.sub = re.sub(r'(?m)^#*\s*<invisible>.*?</invisible>\s*\n?', '', md_texto, flags=re.DOTALL)
+	md_texto = re.sub(r'(?m)^#*\s*<invisible>.*?</invisible>\s*\n?', '', md_texto, flags=re.DOTALL)
 
 	# Figuras y Tablas
 	pattern_fig = r'<latex_fig\s+src=["\'](.*?)["\']\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*/>'
