@@ -53,7 +53,7 @@ def traducir_a_latex(md_texto):
 	md_texto = re.sub(r'\$\$.*?\$\$', placeholder, md_texto, flags=re.DOTALL)
 	md_texto = re.sub(r'\$.*?\$', placeholder, md_texto)
 	md_texto = re.sub(r'\\[a-zA-Z]+\{[^{}]+\}', placeholder, md_texto)
-	md_texto = re.msub = re.sub(r'(?m)^#*\s*<invisible>.*?</invisible>\s*\n?', '', md_texto, flags=re.DOTALL)
+	md_texto = re.sub(r'(?m)^#*\s*<invisible>.*?</invisible>\s*\n?', '', md_texto, flags=re.DOTALL)
 	pattern_fig = r'<latex_fig\s+src=["\'](.*?)["\']\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*/>'
 	replacement_fig = (
 		r'\\begin{figure}[H]\n'
@@ -71,7 +71,7 @@ def traducir_a_latex(md_texto):
 		label_text = match.group(2).strip()
 		tabla_interna = match.group(3).strip('\n\r')
 		tabla_limpia = tabla_interna.replace(r'\begin{center}', '').replace(r'\end{center}', '')
-		return (
+		latex_table_str = (
 			f"\\begin{{table}}[H]\n"
 			f"\\centering\n"
 			f"{tabla_limpia}\n"
@@ -79,8 +79,11 @@ def traducir_a_latex(md_texto):
 			f"\\label{{{label_text}}}\n"
 			f"\\end{{table}}"
 		)
+		class FakeMatch:
+			def __init__(self, val): self.val = val
+			def group(self, num): return self.val
+		return placeholder(FakeMatch(latex_table_str))
 	md_texto = re.sub(pattern_tab, table_sub, md_texto, flags=re.DOTALL)
-	md_texto = re.sub(r'\\begin{table}.*?\\end{table}', placeholder, md_texto)
 	md_texto = md_texto.replace('_', '\\_') 
 	md_texto = re.sub(r'<b>(.*?)</b>', r'\\textbf{\1}', md_texto, flags=re.DOTALL)
 	md_texto = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', md_texto)
