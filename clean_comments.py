@@ -14,7 +14,7 @@ def remover_comentarios_regex(codigo):
     return codigo
 
 def main():
-    archivo = Path("clean_comments_out.py")
+    archivo = Path("clean_comments_inout.py")
     
     if not archivo.exists():
         print(f"❌ Error: No se encontró el archivo '{archivo}' en este directorio.")
