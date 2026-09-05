@@ -367,7 +367,7 @@ def procesar_notebook_completo(verbose=False):
 			
 		archivos_intermedios_count += 1
 		if verbose:
-			print(f"⚙️ Generado Intermedio Consolidado: {ruta_archivo_intermedio}")
+			print(f"⛭ Generado Intermedio Consolidado: {ruta_archivo_intermedio}")
 
 	if not verbose:
 		print(f"☑ Proceso de extracción completo. Originales: {archivos_originales_count} | Nuevos Intermedios: {archivos_intermedios_count}")
@@ -526,7 +526,7 @@ def procesar_y_compilar_informe(nombre_notebook, texFile, clean):
 	ruta_ipynb_backup = os.path.abspath(os.path.join(base_dir, "ipynb.out_original_bak"))
 
 	if os.path.exists(ruta_ipynb_out):
-		print("⚙️ Estructurando entorno de compilación temporal en espejo...", flush=True)
+		print("⛭ Estructurando entorno de compilación temporal en espejo...", flush = True)
 		# 1. Clonamos ipynb.out intacto en una carpeta temporal de compilación
 		if os.path.exists(ruta_ipynb_compile):
 			shutil.rmtree(ruta_ipynb_compile)
@@ -568,9 +568,17 @@ def procesar_y_compilar_informe(nombre_notebook, texFile, clean):
 	try:
 		import gc 
 		gc.set_threshold(0) 
-		
-		# Invocamos la compilación. LaTeX leerá la carpeta 'ipynb.out' modificada temporalmente
-		compilar_pdf_automatico(ruta_tex_absoluta, clean) 
+
+		## Invocamos la compilación. LaTeX leerá la carpeta 'ipynb.out' modifica
+		## a temporalmente.
+		print("⛭ Pasada 1/2...", flush = True)	## Doble pasada p/ paquete "las
+			## tpage". Pasada 1: genera auxiliar. Me aseguro con clean = 0 que e
+			## n esta pasada auxiliar no se borran los archivos temporales.
+		compilar_pdf_automatico(ruta_tex_absoluta, 0)
+		print("⛭ Pasada 2/2...", flush = True)	# Pasada 2: Lee el auxiliar y a
+			## plica el número de paginas final.
+		compilar_pdf_automatico(ruta_tex_absoluta, clean)
+
 	finally:
 		# ==========================================================================
 		# >>> RESTAURACIÓN DE SEGURIDAD INDESTRUCTIBLE EN EL FINALLY <<<
