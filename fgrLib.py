@@ -108,6 +108,8 @@ def traducir_a_latex(md_texto):
 				estilo = "estiloPython"
 			elif lang in ["bash", "shell"]:
 				estilo = "estiloBash"
+			elif lang in ["diff"]:
+				estilo = "estiloDiff"
 			else:
 				estilo = "estiloPython" 
 		else:
