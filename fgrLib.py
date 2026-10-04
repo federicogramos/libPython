@@ -111,9 +111,12 @@ def traducir_a_latex(md_texto):
 			elif lang in ["diff"]:
 				estilo = "estiloDiff"
 			else:
-				estilo = "estiloPython" 
+				estilo = "estiloDefault" 
 		else:
-			estilo = "estiloPython"
+			#estilo = "estiloPython"
+			estilo = "estiloDefault"
+			
+
 			
 		# 🔥 NUEVA LÓGICA: Detectar si hay un atributo lbl="..." para la referencia
 		match_lbl = re.search(r'lbl=["\'](.*?)["\']', atributos)
