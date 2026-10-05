@@ -402,7 +402,7 @@ def compilar_pdf_automatico(archivo_principal="tp.tex", clean=True):
 	try:
 		# Ejecuta el comando de compilación con latexmk de forma controlada
 		resultado = subprocess.run(
-			["latexmk", "-g", "-synctex=0", "-interaction=nonstopmode", "-file-line-error", "-pdf", "-auxdir=tmp", nombre_base],
+			["latexmk", "-g", "-synctex=0", "-interaction=nonstopmode", "-file-line-error", "-pdf", nombre_base],
 			stdout=subprocess.PIPE,
 			stderr=subprocess.PIPE,
 			text=True,
