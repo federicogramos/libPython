@@ -381,17 +381,107 @@ def procesar_notebook_completo(verbose=False):
 #===============================================================================
 #===============================================================================
 
+def _leer_linea_archivo(archivo, linea, dir_base):
+	"""
+	Retorna el contenido de la 'linea' del 'archivo' si se puede resolver en disco
+	(acepta rutas relativas al dir de compilacion o al cwd). Sirve para mostrar
+	al usuario el fragmento exacto que esta causando el error de LaTeX.
+	"""
+	if not archivo or not linea:
+		return None
+	candidatos = [os.path.normpath(archivo)]
+	if not os.path.isabs(archivo):
+		candidatos.append(os.path.normpath(os.path.join(dir_base, archivo)))
+		candidatos.append(os.path.normpath(os.path.join(os.getcwd(), archivo)))
+	for ruta in candidatos:
+		try:
+			if os.path.isfile(ruta):
+				with open(ruta, "r", encoding="utf-8") as f:
+					todas = f.readlines()
+				if 1 <= int(linea) <= len(todas):
+					contenido = todas[int(linea) - 1].rstrip()
+					return contenido[:160] + ("..." if len(contenido) > 160 else "")
+		except (OSError, ValueError):
+			continue
+	return None
+
+
+def _extraer_errores_latex(stdout):
+	"""
+	Extrae del output de latexmk/pdflatex los errores (archivo, linea, mensaje),
+	para los dos formatos que emite pdflatex:
+	  - Con -file-line-error : "../ipynb.out/0011_answer_0002.tex:4: Missing $ inserted."
+	  - Clasico (nonstopmode): "! Missing $ inserted."
+	"""
+	patron_fle = re.compile(r'^(?P<archivo>[^\s:()]+?\.(?:tex|sty|cls)):(?P<linea>\d+):\s+(?P<msg>.+)$')
+	errores = []
+	for linea in (stdout or "").splitlines():
+		limpia = linea.strip()
+		m = patron_fle.match(limpia)
+		if m:
+			errores.append((m.group("archivo"), m.group("linea"), m.group("msg")))
+		elif limpia.startswith("!"):
+			errores.append((None, None, limpia))
+	return errores
+
+
+def _reportar_errores_latex(stdout, stderr, ruta_tex_absoluta):
+	"""
+	Muestra un reporte util de por que LaTeX no compilo:
+	  - Errores concretos: archivo:linea + mensaje del compilador.
+	  - El contenido real de la linea incriminada (se lee el .tex generado).
+	"""
+	MAX_ERRORES = 8
+	dir_tex = os.path.dirname(ruta_tex_absoluta)
+	
+	print("", flush=True)
+	print("❌ Error de compilación en LaTeX:", flush=True)
+	
+	errores = _extraer_errores_latex(stdout)
+	vistos = set()
+	n = 0
+	for archivo, linea, mensaje in errores:
+		contenido = _leer_linea_archivo(archivo, linea, dir_tex)
+		if contenido:
+			clave = (archivo, linea)
+		else:
+			clave = (archivo, linea, mensaje)
+		if clave in vistos:
+			continue
+		vistos.add(clave)
+		if n >= MAX_ERRORES:
+			break
+		n += 1
+		donde = f"[{archivo}:{linea}]" if archivo else "[sin archivo/linea]"
+		print(f"  • {donde}", flush=True)
+		print(f"    {contenido if contenido else mensaje}", flush=True)
+	
+	if n == 0:
+		## Sin lineas de error reconocibles: mostrar el final del output para no perder nada.
+		for linea in (stdout or "").splitlines()[-15:]:
+			if linea.strip():
+				print(f"         {linea.strip()}", flush=True)
+		for linea in (stderr or "").splitlines()[-10:]:
+			if linea.strip():
+				print(f"         {linea.strip()}", flush=True)
+
+
+#===============================================================================
+#===============================================================================
+
 def compilar_pdf_automatico(archivo_principal="tp.tex", clean=True):
 
-	"""Compila el archivo .tex principal a PDF de forma segura y sin colgarse."""
+	"""Compila el .tex principal a PDF de forma segura y sin colgarse.
+	   Retorna True si el PDF se genero, False si la compilacion fallo
+	   (en cuyo caso se muestra un reporte de errores con archivo/linea/mensaje)."""
 	if not os.path.exists(archivo_principal):
 		print(f"⚠ No se encontró el archivo '{archivo_principal}' para compilar.")
-		return
+		return False
 
 	# Verificar si latexmk está instalado en el PATH del sistema
 	if not shutil.which("latexmk"):
 		print("❌ Error: 'latexmk' no está instalado o no se encuentra en el PATH de Windows.")
-		return
+		return False
 
 	# 1. Separar el directorio y el nombre del archivo para fijar la ruta relativa
 	dir_trabajo = os.path.dirname(archivo_principal)
@@ -462,16 +552,19 @@ def compilar_pdf_automatico(archivo_principal="tp.tex", clean=True):
 			else:
 				print("⚠ [clean = 0] Archivos auxiliares no eliminados.")
 
+			return True
+
 		else:
-			print("❌ Error de compilación en LaTeX. Revisa el archivo log o la sintaxis.")
-			# Muestra las últimas 5 líneas del error para saber qué falló
-			lineas_error = resultado.stdout.splitlines()[-5:]
-			print("\n".join(lineas_error))
+			## Reporte util: que archivo, que linea, que mensaje, y donde corregir.
+			_reportar_errores_latex(resultado.stdout, resultado.stderr, archivo_principal)
+			return False
 			
 	except subprocess.TimeoutExpired:
 		print("❌ La compilación tardó demasiado y fue interrumpida de forma segura para evitar cuelgues.")
+		return False
 	except Exception as e:
 		print(f"❌ Ocurrió un error inesperado al lanzar pdflatex: {e}")
+		return False
 
 
 #===============================================================================
@@ -570,6 +663,7 @@ def procesar_y_compilar_informe(nombre_notebook, texFile, clean):
 
 	print("⛭ Compilando LaTeX...", flush=True) 
 	
+	codigo_salida = 0  ## 0 = compilo ok | 1 = la compilacion de LaTeX fallo.
 	try:
 		import gc 
 		gc.set_threshold(0) 
@@ -579,10 +673,14 @@ def procesar_y_compilar_informe(nombre_notebook, texFile, clean):
 		print("⛭ Pasada 1/2...", flush = True)	## Doble pasada p/ paquete "las
 			## tpage". Pasada 1: genera auxiliar. Me aseguro con clean = 0 que e
 			## n esta pasada auxiliar no se borran los archivos temporales.
-		compilar_pdf_automatico(ruta_tex_absoluta, 0)
-		print("⛭ Pasada 2/2...", flush = True)	# Pasada 2: Lee el auxiliar y a
+		if compilar_pdf_automatico(ruta_tex_absoluta, 0):
+			print("⛭ Pasada 2/2...", flush = True)	# Pasada 2: Lee el auxiliar y a
 			## plica el número de paginas final.
-		compilar_pdf_automatico(ruta_tex_absoluta, clean)
+			if not compilar_pdf_automatico(ruta_tex_absoluta, clean):
+				codigo_salida = 1
+		else:
+			print("⛭ La pasada 1/2 fallo: se omite la pasada 2/2 (ver el reporte de errores arriba).", flush = True)
+			codigo_salida = 1
 
 	finally:
 		# ==========================================================================
@@ -601,4 +699,4 @@ def procesar_y_compilar_informe(nombre_notebook, texFile, clean):
 		# ==========================================================================
 
 	# 4. Salida limpia saltándose los cuelgues de hilos ocultos de Python
-	os._exit(0)
+	os._exit(codigo_salida)
