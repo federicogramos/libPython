@@ -1,3 +1,4 @@
 # Archivos temporales de Office.
 **/~$*
 **/~*.tmp
+__pycache__/
