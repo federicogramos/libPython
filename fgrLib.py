@@ -130,6 +130,18 @@ def traducir_a_latex(md_texto):
 		math_blocks[key] = f"\\begin{{lstlisting}}[{opciones_lst}]\n{codigo_interno}\n\\end{{lstlisting}}"
 		return key
 
+	## <latex> ... </latex> : codigo LaTeX LITERAL (passthrough verbatim).
+	## Se protege ANTES que cualquier regla de markdown -> latex y se
+	## restaura tal cual al final (sin escapes de '_' ni conversiones).
+	## Es el "otro lado" del protocolo que produce lib/latex_out.py.
+	def latex_passthrough_sub(match):
+		key = f"MATHBLOCKX{len(math_blocks)}X"
+		math_blocks[key] = match.group(1)
+		return key
+
+	# 0. PROTEGER BLOQUES <latex> (prioridad maxima: nada dentro se toca).
+	md_texto = re.sub(r'<latex>(.*?)</latex>', latex_passthrough_sub, md_texto, flags=re.DOTALL)
+
 	#  PEGÁ EL BLOQUE DE LAS TABLAS EXACTAMENTE ACÁ:
 	pattern_tab = r'<latex_table\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*>(.*?)</latex_table>'
 	def table_sub(match):
