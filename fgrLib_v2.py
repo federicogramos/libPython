@@ -333,10 +333,38 @@ def traducir_a_latex(md_texto):
 	## BLOQUES DE CODIGO FENCED (```lang ... ```) => <code name="lang">: se
 	## corre ANTES de la proteccion <latex> para que el contenido (con sus
 	## '$', '{' y '[' propios de scripts) quede protegido por code_placeholder.
+	## Sanitizar no-ASCII: pdflatex + listings no soporta secuencias UTF-8 de
+	## multi-byte dentro de lstlisting (rompe con 'Invalid UTF-8 byte sequence').
+	## Se mapea a ASCII proximo; lo desconocido pasa a '?'.
+	_CODE_ASCII = {
+		'\u00B7': '*',    ## punto medio (diagramas ASCII art)
+		'\u00D7': 'x',    ## x de multiplicar
+		'\u00B5': 'u',    ## micro
+		'\u03BC': 'u',    ## mu
+		'\u00B0': ' deg', ## grado
+		'\u00AB': '"',    ## comilla izquierda
+		'\u00BB': '"',    ## comilla derecha
+		'\u2013': '-',    ## guion medio
+		'\u2014': '-',    ## guion largo
+		'\u2026': '...',  ## puntos suspensivos
+		'\u00A1': '!',    ## exclamacion invertida
+		'\u00BF': '?',    ## interrogacion invertida
+		'\u00E1': 'a', '\u00E9': 'e', '\u00ED': 'i', '\u00F3': 'o', '\u00FA': 'u',
+		'\u00E2': 'a', '\u00EA': 'e', '\u00F4': 'o', '\u00FB': 'u',
+		'\u00E0': 'a', '\u00E8': 'e', '\u00EC': 'i', '\u00F2': 'o', '\u00F9': 'u',
+		'\u00F1': 'n', '\u00D1': 'N',
+	}
+
+	def _ascii_code(c):
+		out = []
+		for ch in c:
+			out.append(ch if ord(ch) < 0x80 else _CODE_ASCII.get(ch, '?'))
+		return ''.join(out)
+
 	def _fence_sub(m):
 		_lang = m.group(1).strip()
 		_attr = f' name="{_lang}"' if _lang else ''
-		return f'<code{_attr}>\n{m.group(2)}\n</code>'
+		return f'<code{_attr}>\n{_ascii_code(m.group(2))}\n</code>'
 	md_texto = re.sub(r'```(\w*)\s*\n(.*?)```', _fence_sub, md_texto, flags=re.DOTALL)
 
 	md_texto = re.sub(r'<latex>(.*?)</latex>', latex_passthrough_sub, md_texto, flags=re.DOTALL)
@@ -362,6 +390,33 @@ def traducir_a_latex(md_texto):
 		'\u2026': '\\textellipsis', ## puntos suspensivos
 		'\u2013': '--',              ## guion medio (en-dash)
 		'\u2014': '---',             ## guion largo (em-dash)
+		## Griegas (pdflatex + utf8 no las soporta): se pasan a matematica.
+		'\u03B1': '$\\alpha$',   ## alpha
+		'\u03B2': '$\\beta$',    ## beta
+		'\u03B3': '$\\gamma$',   ## gamma
+		'\u03B4': '$\\delta$',   ## delta
+		'\u03B5': '$\\epsilon$', ## epsilon
+		'\u03B8': '$\\theta$',   ## theta
+		'\u03BB': '$\\lambda$',  ## lambda
+		'\u03BC': '$\\mu$',      ## mu
+		'\u03C0': '$\\pi$',      ## pi
+		'\u03C1': '$\\rho$',     ## rho
+		'\u03C3': '$\\sigma$',   ## sigma
+		'\u03C4': '$\\tau$',     ## tau
+		'\u03D5': '$\\upsilon$', ## upsilon
+		'\u03C6': '$\\phi$',     ## phi
+		'\u03C7': '$\\chi$',     ## chi
+		'\u03C8': '$\\psi$',     ## psi
+		'\u03C9': '$\\omega$',   ## omega
+		'\u0393': '$\\Gamma$',   ## Gamma
+		'\u0398': '$\\Theta$',   ## Theta
+		'\u039B': '$\\Lambda$',  ## Lambda
+		'\u039E': '$\\Xi$',      ## Xi
+		'\u03A0': '$\\Pi$',      ## Pi
+		'\u03A3': '$\\Sigma$',   ## Sigma
+		'\u03A6': '$\\Phi$',     ## Phi
+		'\u03A8': '$\\Psi$',     ## Psi
+		'\u03A9': '$\\Omega$',   ## Omega
 	}
 	for _ch, _eq in _UNICODE_A_LATEX.items():
 		md_texto = md_texto.replace(_ch, _eq)
