@@ -15,7 +15,8 @@
 ##    reglas, header/filas coloreadas, table[H]); caption opcional = linea
 ##    **bold** inmediatamente anterior a la tabla.
 ## -- img() agrega una figura (img/ por defecto, caption = nombre del archivo);
-##    comparte el contador NNNN con out().
+##    resize opcional ajusta la escala (1 = 100% => 0.85\textwidth, 0.5 = 50%).
+##    Comparte el contador NNNN con out().
 ## Anotaciones de formato:
 ## -- Párrafos se separan cuando tengo nueva linea en el medio como "espaciador".
 ## -- Por defecto no hay margen en 1er linea de parrafo. Usar &emsp; de ser
@@ -55,7 +56,8 @@ LIB_DIR = os.path.dirname(os.path.abspath(__file__))
 # -- Tablas markdown: template estandar (table[H], header/filas coloreadas);
 #    caption opcional = linea **bold** inmediatamente anterior a la tabla.
 # -- img() agrega una figura (img/ por defecto, caption = nombre del archivo);
-#    comparte el contador NNNN con out() (ej: img('img/0010/x.png', 'answer')).
+#    resize opcional ajusta la escala (1 = 100% => 0.85\textwidth, 0.5 = 50%).
+#    Comparte el contador NNNN con out() (ej: img('img/0010/x.png', 'answer')).
 # -- Buses los archivos en input_files/ (directorio por defecto) o como ruta
 #    relativa al directorio del notebook. Cada out() genera el siguiente indice:
 #    NNNN_tipo_0000.tex, NNNN_tipo_0001.tex, ...
@@ -153,7 +155,7 @@ class Informe:
 			print(f"{vista}\n", flush=True)
 		## show == "none": silencio total (no se imprime nada).
 
-	def img(self, imagen, wrap=None, show="preview"):
+	def img(self, imagen, resize=1, wrap=None, show="preview"):
 		"""Exporta una figura (entorno figure[H]) como el siguiente bloque
 		del informe. Comparte el contador NNNN con out() (se alternan en el
 		orden en que se llaman).
@@ -161,11 +163,15 @@ class Informe:
 		         Si no existe la ruta directa se prueba bajo img/ (directorio
 		         por defecto de imagenes, ej: ./informe/img/0010/x.png). Tambien se
 		         acepta sin extension: se prueba png/jpg/jpeg/pdf).
+		resize : escala de la figura (1 = 100% => width=0.85\textwidth, por
+		         defecto; 0.5 = 50% => width=0.425\textwidth, etc.).
 		show   : igual que out().
 		Convenciones: caption = nombre de archivo sin extension; sin label
 		             (evita labels duplicados entre bloques)."""
 		if show not in ("preview", "all", "none"):
 			raise ValueError(f"show invalido: '{show}' (valores: 'preview', 'all', 'none').")
+		if not isinstance(resize, (int, float)) or isinstance(resize, bool) or resize <= 0:
+			raise ValueError(f"resize invalido: {resize!r} (debe ser numerico positivo; 1 = 100%, 0.5 = 50%).")
 		if wrap is not None and wrap != "answer":
 			raise ValueError(f"wrap invalido: '{wrap}' (solo se soporta 'answer').")
 		## Rutas candidatas: directa y con el directorio por defecto de
@@ -190,10 +196,11 @@ class Informe:
 			.replace('_', r'\_').replace('{', r'\{').replace('}', r'\}'))
 		nombre_archivo = f"{self.prefix}_{self._count:04d}.tex"
 		self._count += 1
+		width = 0.85 * resize   ## resize=1 (100%) => 0.85\textwidth (comportamiento original).
 		fig = (
 			"\\begin{figure}[H]\n"
 			"\\centering\n"
-			f"\\includegraphics[width=0.85\\textwidth]{{../{rel}}}\n"
+			f"\\includegraphics[width={width:.10g}\\textwidth]{{../{rel}}}\n"
 			f"\\caption{{{caption}}}\n"
 			"\\end{figure}"
 		)
@@ -434,6 +441,12 @@ def traducir_a_latex(md_texto):
 	RE_TAB = re.compile(r'^\s*\|.*\|\s*$')
 	RE_SEP = re.compile(r'^\s*\|[\s:\-|]+\|\s*$')
 	RE_CAP_BOLD = re.compile(r'^\s*\*\*(.+?)\*\*\s*$')
+	## Directiva de tabla (comentario HTML propio, invisible en el md):
+	## el contenido entero es la spec de columnas, tal cual se escribe:
+	##   <!-- tabla: c c X p{5.2cm} -->        => sin barras verticales
+	##   <!-- tabla: c | c | X -->             => con verticales, donde se escriban
+	## Sin directiva: reja completa (bordes en todas las celdas).
+	RE_TAB_DIR = re.compile(r'^\s*<!--\s*tabla\s*:\s*([^>]*?)\s*-->')
 
 	def _celda_tex(celda):
 		## El contenido de la tabla queda protegido (placeholder) ANTES de las
@@ -451,19 +464,26 @@ def traducir_a_latex(md_texto):
 	def _split_filas(linea_tabla):
 		return [_celda_tex(c) for c in linea_tabla.strip().strip('|').split('|')]
 
-	def _cuerpo_tabula(cab, filas):
-		if filas:
-			anchos = [max(len(c) for c in col) for col in zip(cab, *filas)]
-		else:
-			anchos = [len(c) for c in cab]
-		longas = [a > 30 for a in anchos]
-		if any(longas):
-			spec = ' | '.join('X' if lg else 'c' for lg in longas)
-			env_in = f"\\begin{{tabularx}}{{\\textwidth}}{{|{spec}|}}"
-			env_out = "\\end{tabularx}"
-		else:
-			env_in = f"\\begin{{tabular}}{{|{' | '.join(['c'] * len(cab))}|}}"
-			env_out = "\\end{tabular}"
+	def _cuerpo_tabula(cab, filas, cols=""):
+		"""cols: spec de columnas explicita, se usa TAL CUAL (parser fiel):
+		'c c X p{5.2cm}' => sin barras verticales;
+		'c | c | X' => verticales donde se escriban.
+		Si viene vacia (sin directiva): heuristica (una columna es 'X' si
+		alguna celda suya supera 30 caracteres; tabularx reparte el ancho
+		restante entre las X) + reja completa por defecto (bordes en las
+		4 caras de cada celda)."""
+		if not cols:
+			if filas:
+				anchos = [max(len(c) for c in col) for col in zip(cab, *filas)]
+			else:
+				anchos = [len(c) for c in cab]
+			longas = [a > 30 for a in anchos]
+			cols = ' '.join('X' if lg else 'c' for lg in longas)
+			## defecto (sin directiva): reja completa, una '|' entre cada columna.
+			cols = '|'.join([''] + cols.split() + [''])
+		## con directiva: la spec va tal cual se escribio.
+		env_in = f"\\begin{{tabularx}}{{\\textwidth}}{{{cols}}}"
+		env_out = "\\end{tabularx}"
 		out = [env_in, "\\hline"]
 		out.append("\\rowcolor{tabColorHdr_085}\n    " + " & ".join(cab) + " \\\\ \\hline")
 		for f in filas:
@@ -484,29 +504,47 @@ def traducir_a_latex(md_texto):
 				_filas.append(_split_filas(_tab_lineas[_tab_i]))
 				_tab_i += 1
 			_cap = ""
-			## caption: linea **bold** previa a la tabla (se saltan blanks).
+			_tab_size = ""
+			_tab_cols = ""
+			## linea previa inmediata: directiva <!-- tabla: c c X p{5cm} -->
+			## (el contenido entero es la spec de columnas, tal cual se escribe)
+			## y/o caption **bold**.
 			_k = len(_tab_nuevas) - 1
 			while _k >= 0 and _tab_nuevas[_k].strip() == "":
 				_k -= 1
+			_m = RE_TAB_DIR.match(_tab_nuevas[_k]) if _k >= 0 else None
+			if _m:
+				_tab_cols = _m.group(1).strip()   ## contenido entero = spec de columnas
+				del _tab_nuevas[_k:]
+				_k = len(_tab_nuevas) - 1
+				while _k >= 0 and _tab_nuevas[_k].strip() == "":
+					_k -= 1
 			if _k >= 0 and RE_CAP_BOLD.match(_tab_nuevas[_k]):
 				_cap = _celda_tex(RE_CAP_BOLD.match(_tab_nuevas[_k]).group(1))
 				del _tab_nuevas[_k:]
-			_tab_nuevas.append(f'<latex_table cap="{_cap}" lbl="">\n{_cuerpo_tabula(_cab, _filas)}\n</latex_table>')
+			_tab_nuevas.append(
+				f'<latex_table cap="{_cap}" lbl="" size="{_tab_size}" cols="{_tab_cols}">\n'
+				f'{_cuerpo_tabula(_cab, _filas, _tab_cols)}\n'
+				f'</latex_table>'
+			)
 			continue
 		_tab_nuevas.append(_l)
 		_tab_i += 1
 	md_texto = '\n'.join(_tab_nuevas)
-	pattern_tab = r'<latex_table\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s*>(.*?)</latex_table>'
+	pattern_tab = r'<latex_table\s+cap=["\'](.*?)["\']\s+lbl=["\'](.*?)["\']\s+size=["\'](.*?)["\']\s+cols=["\'](.*?)["\']\s*>(.*?)</latex_table>'
 	def table_sub(match):
 		caption_text = match.group(1).strip()
 		label_text = match.group(2).strip()
-		tabla_interna = match.group(3).strip('\n\r')
+		size_text = match.group(3).strip()
+		tabla_interna = match.group(5).strip('\n\r')
 		tabla_limpia = tabla_interna.replace(r'\begin{center}', '').replace(r'\end{center}', '')
 		caption_ln = f"\\caption{{{caption_text}}}\n" if caption_text else ""
 		label_ln = f"\\label{{{label_text}}}\n" if label_text else ""
+		size_ln = f"\\{size_text}\n" if size_text in ("footnotesize", "small", "scriptsize") else ""
 		latex_table_str = (
 			f"\\begin{{table}}[H]\n"
 			f"\\centering\n"
+			f"{size_ln}"
 			f"{tabla_limpia}\n"
 			f"{caption_ln}"
 			f"{label_ln}"
